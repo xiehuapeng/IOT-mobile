@@ -60,8 +60,11 @@ function enterDemo() {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  height: calc(100% - 42px);
+  min-height: calc(100% - 42px);
+  height: auto;
   padding: 16px;
+  padding-bottom: 28px;
+  overflow-y: auto;
 }
 
 .hero-panel,
@@ -114,5 +117,25 @@ function enterDemo() {
   width: 100%;
   margin-top: 18px;
   padding: 14px 16px;
+  position: sticky;
+  bottom: 0;
+}
+
+@media (max-height: 760px) {
+  .hero-panel,
+  .login-card {
+    padding: 18px 16px;
+  }
+
+  .hero-copy {
+    margin: 10px 0 14px;
+    line-height: 1.7;
+  }
+
+  .field,
+  .tips-box,
+  .submit {
+    margin-top: 14px;
+  }
 }
 </style>
