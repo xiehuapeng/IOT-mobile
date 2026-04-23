@@ -1,5 +1,5 @@
 <template>
-  <section class="section-card validation-panel">
+  <section class="validation-panel">
     <div class="section-heading">
       <div>
         <h3>校验结果</h3>
@@ -27,12 +27,20 @@
     <div class="action-row">
       <button class="ghost-button action-button" type="button" @click="$emit('back')">返回修改</button>
       <button
+        v-if="result.duplicateRuleId"
+        class="ghost-button action-button"
+        type="button"
+        @click="$emit('view-existing', result.duplicateRuleId)"
+      >
+        查看已有规则
+      </button>
+      <button
         class="accent-button action-button"
         type="button"
-        :disabled="!result.passed"
+        :disabled="!result.passed && !result.allowDuplicateContinue"
         @click="$emit('next')"
       >
-        继续
+        {{ result.allowDuplicateContinue ? "继续创建" : "继续" }}
       </button>
     </div>
   </section>
@@ -48,12 +56,21 @@ defineProps<{
 defineEmits<{
   back: [];
   next: [];
+  "view-existing": [ruleId: string];
 }>();
 </script>
 
 <style scoped>
 .validation-panel {
   padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(154, 196, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(17, 46, 91, 0.86), rgba(7, 24, 46, 0.92)),
+    rgba(8, 27, 56, 0.78);
+  box-shadow:
+    0 18px 40px rgba(2, 10, 24, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .pill.pass {

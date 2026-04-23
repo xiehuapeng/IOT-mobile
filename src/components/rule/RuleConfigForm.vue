@@ -1,8 +1,8 @@
 <template>
-  <section class="section-card config-panel">
+  <section class="config-panel">
     <div class="section-heading">
       <div>
-        <div class="page-kicker">Structured Card</div>
+        <div class="page-kicker">Assistant Card</div>
         <h3>{{ title }}</h3>
         <p>{{ description }}</p>
       </div>
@@ -100,9 +100,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   submit: [values: RuleFormValues];
   back: [];
+  "update:values": [values: RuleFormValues];
 }>();
 
 const localValues = reactive<RuleFormValues>({});
+let monitorFrequencyTouched = false;
 
 function cloneValues(source: RuleFormValues): RuleFormValues {
   const next: RuleFormValues = {};
@@ -117,6 +119,7 @@ watch(
   (next) => {
     Object.keys(localValues).forEach((key) => delete localValues[key as keyof RuleFormValues]);
     Object.assign(localValues, cloneValues(next));
+    monitorFrequencyTouched = Boolean(next.monitorFrequency);
   },
   { immediate: true, deep: true },
 );
@@ -132,6 +135,37 @@ function arrayValue(key: string) {
 
 function setValue(key: string, value: string) {
   localValues[key as keyof RuleFormValues] = value as never;
+
+  if (key === "monitorFrequency") {
+    monitorFrequencyTouched = true;
+  }
+
+  if (key === "objectType" && props.fields.some((field) => field.id === "monitorFrequency")) {
+    if (value === "order") {
+      delete localValues.monitorScope;
+      delete localValues.monitorSpecificOrder;
+    } else if (value === "group" || value === "customer") {
+      localValues.monitorScope = (localValues.monitorScope ?? "all-orders") as never;
+    }
+
+    if (!monitorFrequencyTouched) {
+      localValues.monitorFrequency = (value === "order" ? "instant" : "summary-daily") as never;
+    }
+  }
+
+  if (key === "monitorScope" && value !== "specific-order") {
+    delete localValues.monitorSpecificOrder;
+  }
+
+  if (key === "monitorTimingMode") {
+    if (value === "scheduled-summary") {
+      delete localValues.monitorThreshold;
+    } else {
+      delete localValues.monitorSummaryTime;
+    }
+  }
+
+  emit("update:values", cloneValues(localValues));
 }
 
 function toggleArrayValue(key: string, value: string) {
@@ -139,6 +173,7 @@ function toggleArrayValue(key: string, value: string) {
   localValues[key as keyof RuleFormValues] = (
     current.includes(value) ? current.filter((item) => item !== value) : [...current, value]
   ) as never;
+  emit("update:values", cloneValues(localValues));
 }
 
 function submit() {
@@ -149,6 +184,14 @@ function submit() {
 <style scoped>
 .config-panel {
   padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(154, 196, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(17, 46, 91, 0.86), rgba(7, 24, 46, 0.92)),
+    rgba(8, 27, 56, 0.78);
+  box-shadow:
+    0 18px 40px rgba(2, 10, 24, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .field-list {
@@ -211,6 +254,7 @@ function submit() {
   padding: 14px;
   border-radius: 18px;
   text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .option-card small {

@@ -1,12 +1,12 @@
 <template>
-  <section class="section-card thread">
-    <div class="section-heading">
+  <section class="thread" :class="variant">
+    <div v-if="!compact" class="section-heading">
       <div>
         <h3>对话记录</h3>
         <p>点击任意消息可快速复制内容。</p>
       </div>
     </div>
-    <div class="messages">
+    <div class="messages" :class="{ compact }">
       <button
         v-for="message in messages"
         :key="message.id"
@@ -30,9 +30,17 @@ import { ref } from "vue";
 
 import type { ConversationMessage } from "../../types/agent";
 
-const props = defineProps<{
-  messages: ConversationMessage[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    messages: ConversationMessage[];
+    compact?: boolean;
+    variant?: "panel" | "plain";
+  }>(),
+  {
+    compact: false,
+    variant: "panel",
+  },
+);
 
 const copiedId = ref<string | null>(null);
 
@@ -57,7 +65,23 @@ async function copyMessage(message: ConversationMessage) {
 
 <style scoped>
 .thread {
+  border-radius: 24px;
+}
+
+.thread.panel {
   padding: 18px;
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
+    var(--bg-panel);
+  box-shadow:
+    0 18px 44px rgba(2, 10, 24, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(22px);
+}
+
+.thread.plain {
+  padding: 0;
 }
 
 .messages {
@@ -67,11 +91,17 @@ async function copyMessage(message: ConversationMessage) {
   margin-top: 16px;
 }
 
+.messages.compact {
+  margin-top: 0;
+  gap: 10px;
+}
+
 .message {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 88%;
+  max-width: 86%;
+  min-width: 0;
   padding: 14px 15px;
   border-radius: 20px;
   border: 1px solid rgba(152, 192, 255, 0.12);
@@ -102,6 +132,10 @@ async function copyMessage(message: ConversationMessage) {
 .message.system {
   max-width: 100%;
   background: rgba(18, 53, 101, 0.56);
+}
+
+.messages.compact .message {
+  max-width: 100%;
 }
 
 .message.success {

@@ -1,5 +1,5 @@
 <template>
-  <section class="section-card alert-panel">
+  <section class="alert-panel">
     <div class="section-heading">
       <div>
         <h3>提醒记录</h3>
@@ -25,12 +25,10 @@
       </div>
 
       <div class="action-grid">
-        <button class="ghost-button small-action" type="button" @click="$emit('view-detail', alert.ruleId)">查看规则</button>
-        <button class="ghost-button small-action" type="button" @click="$emit('track', alert.id)">标记跟进</button>
+        <button class="accent-button small-action" type="button" @click="$emit('jump', alert)">去排障</button>
+        <button class="ghost-button small-action" type="button" @click="$emit('view-detail', alert.ruleId)">查看详情</button>
         <button class="ghost-button small-action" type="button" @click="$emit('edit', alert.ruleId)">调整规则</button>
-        <button class="ghost-button small-action" type="button" @click="$emit('stop', alert.ruleId)">暂停规则</button>
-        <button class="ghost-button small-action" type="button" @click="$emit('resume', alert.ruleId)">恢复启用</button>
-        <button class="accent-button small-action" type="button" @click="$emit('jump', alert)">前往处理</button>
+        <button class="ghost-button small-action danger-action" type="button" @click="$emit('stop', alert.ruleId)">终止规则</button>
       </div>
     </article>
   </section>
@@ -46,10 +44,8 @@ defineProps<{
 defineEmits<{
   manage: [];
   "view-detail": [ruleId: string];
-  track: [alertId: string];
   edit: [ruleId: string];
   stop: [ruleId: string];
-  resume: [ruleId: string];
   jump: [alert: RuleAlertRecord];
 }>();
 
@@ -61,6 +57,14 @@ function channelText(channels: RuleAlertRecord["notificationChannels"]) {
 <style scoped>
 .alert-panel {
   padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(154, 196, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(17, 46, 91, 0.86), rgba(7, 24, 46, 0.92)),
+    rgba(8, 27, 56, 0.78);
+  box-shadow:
+    0 18px 40px rgba(2, 10, 24, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .ghost-inline {
@@ -120,5 +124,10 @@ function channelText(channels: RuleAlertRecord["notificationChannels"]) {
 .small-action {
   min-height: 44px;
   padding: 10px 12px;
+}
+
+.danger-action {
+  color: #ffd0c6;
+  border-color: rgba(255, 120, 96, 0.28);
 }
 </style>

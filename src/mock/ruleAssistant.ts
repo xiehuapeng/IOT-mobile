@@ -80,6 +80,11 @@ export const objectTypeLabels: Record<RuleObjectType, string> = {
   order: "订单号",
 };
 
+export const monitorScopeLabels: Record<string, string> = {
+  "all-orders": "所有订单",
+  "specific-order": "特定订单",
+};
+
 export const frequencyLabels: Record<string, string> = {
   once: "仅提醒一次",
   daily: "每日提醒",
@@ -231,6 +236,36 @@ export function getRuleFields(intent: Exclude<RuleIntent, "unsupported">, values
 
   const orderFields: RuleField[] = [
     ...baseFields,
+    ...(values.objectType === "group" || values.objectType === "customer"
+      ? [
+          {
+            id: "monitorScope",
+            label: "监控范围",
+            type: "radio" as const,
+            required: true,
+            options: [
+              { label: "所有订单", value: "all-orders" },
+              { label: "特定订单", value: "specific-order" },
+            ],
+            helper:
+              values.objectType === "group"
+                ? "集团级监控可覆盖全部关联订单，也可只关注某一笔重点订单。"
+                : "客户级监控可覆盖客户下全部订单，也可只关注某一笔重点订单。",
+          },
+          ...(values.monitorScope === "specific-order"
+            ? [
+                {
+                  id: "monitorSpecificOrder",
+                  label: "特定订单号",
+                  type: "text",
+                  required: true,
+                  placeholder: "例如：ORD-240301",
+                  helper: `可用订单示例：${existingObjects.order.join("、")}`,
+                } satisfies RuleField,
+              ]
+            : []),
+        ]
+      : []),
     {
       id: "monitorCondition",
       label: "监控条件",
@@ -266,6 +301,12 @@ export function getRuleFields(intent: Exclude<RuleIntent, "unsupported">, values
         { label: "每日汇总", value: "summary-daily" },
         { label: "指定时段提醒", value: "scheduled-window" },
       ],
+      helper:
+        values.objectType === "order"
+          ? "单订单场景默认建议“状态变化即提醒”。"
+          : values.objectType === "group" || values.objectType === "customer"
+            ? "集团/客户场景默认建议“每日汇总提醒”。"
+            : "可按监控对象选择更合适的提醒频率。",
     },
     ...notifyChannelFields(values),
     ...effectivePeriodFields(values, "order-monitor"),
@@ -449,6 +490,33 @@ export function validateRuleForm(
   }
 
   if (intent === "order-monitor") {
+    if ((values.objectType === "group" || values.objectType === "customer") && !values.monitorScope) {
+      ruleGroup.issues.push({
+        type: "rule",
+        severity: "error",
+        title: "未选择监控范围",
+        detail: "集团或客户维度监控时，请选择监控全部订单还是仅监控特定订单。",
+      });
+    }
+
+    if (values.monitorScope === "specific-order") {
+      if (!values.monitorSpecificOrder?.trim()) {
+        ruleGroup.issues.push({
+          type: "rule",
+          severity: "error",
+          title: "特定订单号缺失",
+          detail: "当前已选择特定订单，请补充需要重点跟踪的订单号。",
+        });
+      } else if (!existingObjects.order.includes(values.monitorSpecificOrder.trim())) {
+        objectGroup.issues.push({
+          type: "object",
+          severity: "error",
+          title: "特定订单不存在",
+          detail: `订单号“${values.monitorSpecificOrder}”不存在，请检查后重新输入。`,
+        });
+      }
+    }
+
     if (!values.monitorCondition) {
       ruleGroup.issues.push({
         type: "rule",
@@ -503,6 +571,15 @@ export function validateRuleForm(
         detail: "状态变化配置为每日汇总时，系统会以汇总检查方式执行而非实时触发。",
       });
     }
+
+    if ((values.objectType === "group" || values.objectType === "customer") && values.monitorFrequency === "instant") {
+      capacityGroup.issues.push({
+        type: "capacity",
+        severity: "warning",
+        title: "监控范围较大，建议汇总提醒",
+        detail: "集团或客户维度直接做状态即时提醒可能产生大量消息，建议优先改为每日汇总或指定时段提醒。",
+      });
+    }
   }
 
   if (!(values.notifyChannels?.length ?? 0)) {
@@ -554,9 +631,9 @@ export function validateRuleForm(
   if (duplicate) {
     duplicateGroup.issues.push({
       type: "duplicate",
-      severity: "error",
+      severity: "warning",
       title: "已存在相同规则",
-      detail: `规则“${duplicate.name}”与当前配置高度一致，建议直接复用或修改已有规则。`,
+      detail: `规则“${duplicate.name}”与当前配置高度一致，默认不建议重复创建，可返回查看已有规则或继续创建。`,
     });
   }
 
@@ -587,10 +664,24 @@ export function validateRuleForm(
     });
   }
 
-  const passed = groups.every((group) => group.issues.every((issue) => issue.severity !== "error"));
-  const summary = passed ? "校验通过，可进入规则确认摘要页。" : "存在需要处理的问题，请修改后重新校验。";
+  const hasBlockingError = groups.some((group) =>
+    group.issues.some((issue) => issue.severity === "error"),
+  );
+  const allowDuplicateContinue = Boolean(duplicate) && !hasBlockingError;
+  const passed = !hasBlockingError;
+  const summary = hasBlockingError
+    ? "存在需要处理的问题，请修改后重新校验。"
+    : allowDuplicateContinue
+      ? "检测到已存在相同规则，默认不建议重复创建。你可以查看已有规则，也可以继续创建。"
+      : "校验通过，可进入规则确认摘要页。";
 
-  return { passed, groups, summary };
+  return {
+    passed,
+    groups,
+    summary,
+    duplicateRuleId: duplicate?.id,
+    allowDuplicateContinue,
+  };
 }
 
 export function buildRuleSummary(intent: Exclude<RuleIntent, "unsupported">, values: RuleFormValues): RuleSummary {
@@ -610,6 +701,14 @@ export function buildRuleSummary(intent: Exclude<RuleIntent, "unsupported">, val
       : [
           { label: "规则类型", value: "订单执行监控类" },
           { label: "监控对象", value: `${objectTypeLabels[values.objectType as RuleObjectType]} / ${values.objectValue ?? "-"}` },
+          ...(values.objectType === "group" || values.objectType === "customer"
+            ? [
+                {
+                  label: "监控范围",
+                  value: formatMonitorScope(values),
+                },
+              ]
+            : []),
           { label: "触发条件 / 预警类型", value: monitorConditionLabels[values.monitorCondition ?? ""] ?? "-" },
           { label: "提醒时间 / 阈值", value: formatMonitorTiming(values) },
           { label: "提醒频率", value: frequencyLabels[values.monitorFrequency ?? ""] ?? "-" },
@@ -660,6 +759,7 @@ export function createManagedRule(
     intent,
     objectType: values.objectType as RuleObjectType,
     objectValue: values.objectValue ?? "",
+    scopeLabel: formatMonitorScope(values),
     primaryCondition: getPrimaryCondition(intent, values),
     frequencyLabel: intent === "alert" ? frequencyLabels[values.alertFrequency ?? ""] : frequencyLabels[values.monitorFrequency ?? ""],
     notifyChannels: (values.notifyChannels ?? []) as RuleNotificationChannel[],
@@ -837,6 +937,7 @@ function createStarterRule(
     intent,
     objectType: values.objectType as RuleObjectType,
     objectValue: values.objectValue ?? "",
+    scopeLabel: formatMonitorScope(values),
     primaryCondition: getPrimaryCondition(intent, values),
     frequencyLabel: intent === "alert" ? frequencyLabels[values.alertFrequency ?? ""] : frequencyLabels[values.monitorFrequency ?? ""],
     notifyChannels: (values.notifyChannels ?? []) as RuleNotificationChannel[],
@@ -868,6 +969,18 @@ function formatMonitorTiming(values: RuleFormValues): string {
   return values.monitorSummaryTime ?? "指定时间点汇总提醒";
 }
 
+function formatMonitorScope(values: RuleFormValues): string {
+  if (values.objectType !== "group" && values.objectType !== "customer") {
+    return values.objectType === "order" ? "单订单监控" : "-";
+  }
+
+  if (values.monitorScope === "specific-order") {
+    return `${monitorScopeLabels["specific-order"]}${values.monitorSpecificOrder ? ` / ${values.monitorSpecificOrder}` : ""}`;
+  }
+
+  return monitorScopeLabels[values.monitorScope ?? "all-orders"] ?? "所有订单";
+}
+
 function formatChannels(channels: string[]): string {
   if (!channels.length) return "-";
   return channels.map((item) => (item === "message" ? "消息通知" : "通知中心")).join(" + ");
@@ -890,7 +1003,15 @@ function buildAlertHitReason(rule: ManagedRule): string {
 function buildOrderHitReason(rule: ManagedRule): string {
   if (rule.values.monitorCondition === "failed") return `订单${rule.objectValue}执行失败。`;
   if (rule.values.monitorCondition === "timeout") return `订单${rule.objectValue}已超过${rule.values.monitorThreshold}小时未完成。`;
-  if (rule.values.objectType === "customer") return `客户${rule.objectValue}相关订单状态发生变化。`;
-  if (rule.values.objectType === "group") return `集团${rule.objectValue}相关订单出现失败记录。`;
+  if (rule.values.objectType === "customer") {
+    return rule.values.monitorScope === "specific-order"
+      ? `客户${rule.objectValue}下订单${rule.values.monitorSpecificOrder}今日状态有变化。`
+      : `客户${rule.objectValue}相关订单今日状态有变化。`;
+  }
+  if (rule.values.objectType === "group") {
+    return rule.values.monitorScope === "specific-order"
+      ? `集团${rule.objectValue}下订单${rule.values.monitorSpecificOrder}出现异常记录。`
+      : `集团${rule.objectValue}相关订单今日出现失败记录汇总。`;
+  }
   return `订单${rule.objectValue}状态发生变化。`;
 }

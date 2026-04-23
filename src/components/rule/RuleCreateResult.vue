@@ -1,5 +1,5 @@
 <template>
-  <section class="section-card result-panel">
+  <section class="result-panel">
     <div class="section-heading">
       <div>
         <h3>规则创建成功</h3>
@@ -14,6 +14,7 @@
       <div class="summary-item"><span>创建时间</span><strong>{{ rule.createdAt }}</strong></div>
       <div class="summary-item"><span>规则类型</span><strong>{{ rule.intent === "alert" ? "预警提醒类" : "订单执行监控类" }}</strong></div>
       <div class="summary-item"><span>监控对象</span><strong>{{ rule.objectValue }}</strong></div>
+      <div v-if="rule.intent === 'order-monitor'" class="summary-item"><span>监控范围</span><strong>{{ rule.scopeLabel }}</strong></div>
       <div class="summary-item"><span>执行方式</span><strong>{{ rule.executionLabel }}</strong></div>
     </div>
 
@@ -40,6 +41,14 @@ defineEmits<{
 <style scoped>
 .result-panel {
   padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(154, 196, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(17, 46, 91, 0.86), rgba(7, 24, 46, 0.92)),
+    rgba(8, 27, 56, 0.78);
+  box-shadow:
+    0 18px 40px rgba(2, 10, 24, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .summary-grid {

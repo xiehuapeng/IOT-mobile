@@ -1,43 +1,42 @@
 <template>
-  <section class="section-card entry-panel">
-    <div class="section-heading">
-      <div>
-        <h3>新建规则</h3>
-        <p>可直接选择常用场景，也可以输入你的实际诉求。</p>
-      </div>
-      <RouterLink class="ghost-link" to="/app/my-rules">我的规则</RouterLink>
+  <section class="entry-panel">
+    <div class="assistant-note">
+      <span class="note-tag">快捷场景</span>
+      <p>我可以直接带你进入对应配置，你也可以继续在下方输入自然语言。</p>
     </div>
 
-    <div class="entry-grid">
+    <div class="scenario-grid">
       <button
         v-for="item in entries"
         :key="item.id"
-        class="entry-card"
+        class="scenario-card"
         type="button"
         @click="$emit('quick-entry', item.id)"
       >
-        <span class="pill">{{ item.tag }}</span>
-        <strong>{{ item.title }}</strong>
+        <div class="scenario-head">
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.tag }}</span>
+        </div>
         <p>{{ item.description }}</p>
       </button>
     </div>
 
-    <label class="request-box">
-      <span>直接描述你的诉求</span>
+    <div class="composer-shell">
       <textarea
+        ref="textareaRef"
         :value="request"
-        rows="4"
-        placeholder="例如：帮我盯一下这个集团红名单到期；这个订单如果失败就通知我。"
-        @input="$emit('update:request', ($event.target as HTMLTextAreaElement).value)"
+        rows="1"
+        class="composer-input"
+        placeholder="直接输入你的诉求，按 Enter 发送，Shift + Enter 换行"
+        @input="handleInput"
+        @keydown="handleKeydown"
       ></textarea>
-    </label>
-
-    <button class="accent-button submit-button" type="button" @click="$emit('submit-request')">开始处理</button>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { RouterLink } from "vue-router";
+import { nextTick, ref } from "vue";
 
 import { ruleQuickEntries as entries } from "../../mock/ruleAssistant";
 import type { RuleEntryMode } from "../../types/agent";
@@ -46,85 +45,129 @@ defineProps<{
   request: string;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   "update:request": [value: string];
   "quick-entry": [entry: RuleEntryMode];
   "submit-request": [];
 }>();
+
+const textareaRef = ref<HTMLTextAreaElement | null>(null);
+
+function resizeTextarea() {
+  const node = textareaRef.value;
+  if (!node) return;
+  node.style.height = "auto";
+  node.style.height = `${Math.min(node.scrollHeight, 140)}px`;
+}
+
+function handleInput(event: Event) {
+  emit("update:request", (event.target as HTMLTextAreaElement).value);
+  nextTick(resizeTextarea);
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    emit("submit-request");
+  }
+}
 </script>
 
 <style scoped>
 .entry-panel {
-  padding: 18px;
-}
-
-.ghost-link {
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.entry-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.entry-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px;
+  gap: 14px;
+}
+
+.assistant-note,
+.composer-shell {
+  padding: 14px 16px;
   border-radius: 20px;
-  border: 1px solid rgba(153, 192, 255, 0.15);
-  background: rgba(9, 31, 61, 0.54);
+  border: 1px solid rgba(153, 192, 255, 0.14);
+  background: rgba(9, 31, 61, 0.44);
+}
+
+.note-tag {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(92, 201, 255, 0.12);
+  color: #8bdcff;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.assistant-note p {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.scenario-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.scenario-card {
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(125, 188, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(16, 46, 90, 0.96), rgba(7, 23, 46, 0.92)),
+    rgba(8, 30, 58, 0.72);
   color: var(--text-main);
   text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.entry-card strong {
-  font-size: 16px;
-}
-
-.entry-card p {
-  margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  font-size: 13px;
-}
-
-.request-box {
+.scenario-head {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 10px;
-  margin-top: 18px;
 }
 
-.request-box span {
-  font-size: 14px;
-  font-weight: 600;
+.scenario-head strong {
+  font-size: 16px;
+  line-height: 1.4;
 }
 
-.request-box textarea {
+.scenario-head span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(92, 201, 255, 0.12);
+  color: #9be4ff;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.scenario-card p {
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.composer-shell {
+  padding: 10px 14px;
+}
+
+.composer-input {
   width: 100%;
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(155, 196, 255, 0.18);
-  background: rgba(7, 24, 46, 0.72);
+  min-height: 28px;
+  max-height: 140px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
   color: var(--text-main);
-  resize: vertical;
+  line-height: 1.7;
 }
 
-.submit-button {
-  width: 100%;
-  margin-top: 18px;
-  padding: 14px 16px;
+.composer-input::placeholder {
+  color: var(--text-muted);
 }
 
-@media (max-width: 380px) {
-  .entry-grid {
-    grid-template-columns: 1fr;
-  }
-}
 </style>

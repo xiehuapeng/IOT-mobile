@@ -94,6 +94,7 @@ export type RuleAlertType = "red-list-expiry" | "arrears-risk" | "plan-expiry" |
 export type RuleAlertTimingMode = "days-before" | "workdays-before" | "condition-hit";
 export type RuleMonitorCondition = "in-progress" | "failed" | "timeout" | "status-change";
 export type RuleMonitorTimingMode = "hours-timeout" | "days-timeout" | "status-change" | "scheduled-summary";
+export type RuleMonitorScope = "all-orders" | "specific-order";
 export type RuleFrequency = "once" | "daily" | "weekly" | "until-handled" | "instant" | "summary-daily" | "scheduled-window";
 export type RuleNotificationChannel = "notification-center" | "message";
 export type RuleEffectivePeriod = "long-term" | "time-range" | "one-time" | "until-complete";
@@ -148,6 +149,8 @@ export interface RuleFormValues {
   effectiveStart?: string;
   effectiveEnd?: string;
   monitorCondition?: RuleMonitorCondition;
+  monitorScope?: RuleMonitorScope;
+  monitorSpecificOrder?: string;
   monitorTimingMode?: RuleMonitorTimingMode;
   monitorThreshold?: string;
   monitorSummaryTime?: string;
@@ -171,6 +174,8 @@ export interface RuleValidationResult {
   passed: boolean;
   groups: RuleValidationGroup[];
   summary: string;
+  duplicateRuleId?: string;
+  allowDuplicateContinue?: boolean;
 }
 
 export interface RuleSummaryItem {
@@ -193,6 +198,7 @@ export interface ManagedRule {
   intent: Exclude<RuleIntent, "unsupported">;
   objectType: RuleObjectType;
   objectValue: string;
+  scopeLabel?: string;
   primaryCondition: string;
   frequencyLabel: string;
   notifyChannels: RuleNotificationChannel[];

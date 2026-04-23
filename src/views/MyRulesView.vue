@@ -30,6 +30,7 @@
           </div>
           <div class="rule-meta">
             <div><span>监控对象</span><strong>{{ rule.objectValue }}</strong></div>
+            <div v-if="rule.intent === 'order-monitor'"><span>监控范围</span><strong>{{ rule.scopeLabel }}</strong></div>
             <div><span>触发条件</span><strong>{{ conditionLabel(rule) }}</strong></div>
             <div><span>提醒频率</span><strong>{{ rule.frequencyLabel }}</strong></div>
             <div><span>生效周期</span><strong>{{ rule.effectiveLabel }}</strong></div>
@@ -42,6 +43,12 @@
             <button class="ghost-button small-action" type="button" @click="toggleHistory(rule.id)">查看触发记录</button>
           </div>
           <div v-if="selectedRuleId === rule.id" class="history-panel">
+            <div class="detail-grid">
+              <div v-for="item in rule.summary.items" :key="item.label" class="detail-item">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </div>
+            </div>
             <div v-for="item in historyForRule(rule.id)" :key="item.id" class="history-item">
               <strong>{{ item.reason }}</strong>
               <p>{{ item.triggeredAt }} / {{ item.recommendation }}</p>
@@ -118,8 +125,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { RouterLink, useRouter } from "vue-router";
+import { ref, watch } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 
 import { alertTypeLabels, monitorConditionLabels } from "../mock/ruleAssistant";
 import {
@@ -134,6 +141,7 @@ import {
 } from "../stores/ruleCenter";
 
 const router = useRouter();
+const route = useRoute();
 const selectedRuleId = ref<string | null>(null);
 
 function editRule(ruleId: string) {
@@ -142,6 +150,7 @@ function editRule(ruleId: string) {
 
 function toggleHistory(ruleId: string) {
   selectedRuleId.value = selectedRuleId.value === ruleId ? null : ruleId;
+  router.replace({ path: "/app/my-rules", query: selectedRuleId.value ? { ruleId } : {} });
 }
 
 function historyForRule(ruleId: string) {
@@ -165,8 +174,23 @@ function resumeRule(ruleId: string) {
 
 function removeRule(ruleId: string) {
   deleteRule(ruleId);
-  if (selectedRuleId.value === ruleId) selectedRuleId.value = null;
+  if (selectedRuleId.value === ruleId) {
+    selectedRuleId.value = null;
+    router.replace({ path: "/app/my-rules" });
+  }
 }
+
+watch(
+  () => route.query.ruleId,
+  (ruleId) => {
+    if (!ruleId || Array.isArray(ruleId)) {
+      selectedRuleId.value = null;
+      return;
+    }
+    selectedRuleId.value = ruleId;
+  },
+  { immediate: true },
+);
 </script>
 
 <style scoped>
@@ -256,6 +280,26 @@ function removeRule(ruleId: string) {
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid rgba(154, 196, 255, 0.12);
+}
+
+.detail-grid {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(7, 24, 46, 0.62);
+}
+
+.detail-item span {
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .history-item {
