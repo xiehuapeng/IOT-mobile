@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>掌厅智能助手</title>
+    <script>
+      (function () {
+        var path = location.pathname + location.search + location.hash;
+        var basePath = location.pathname.replace(/\/404\.html$/, "");
+        var targetPath = path;
+
+        if (basePath && path.indexOf(basePath) === 0) {
+          targetPath = path.slice(basePath.length) || "/";
+        }
+
+        sessionStorage.setItem("github-pages-path", targetPath);
+        window.location.replace(basePath + "/");
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>
