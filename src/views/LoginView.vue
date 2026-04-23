@@ -61,10 +61,12 @@ function enterDemo() {
   flex-direction: column;
   gap: 18px;
   min-height: calc(100% - 42px);
+  min-height: calc(100dvh - 42px);
   height: auto;
   padding: 16px;
-  padding-bottom: 28px;
+  padding-bottom: calc(28px + env(safe-area-inset-bottom));
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .hero-panel,
@@ -118,7 +120,8 @@ function enterDemo() {
   margin-top: 18px;
   padding: 14px 16px;
   position: sticky;
-  bottom: 0;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 2;
 }
 
 @media (max-height: 760px) {

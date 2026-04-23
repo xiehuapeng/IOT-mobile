@@ -51,6 +51,7 @@ onBeforeUnmount(() => {
 .stage {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 28px 18px;
@@ -104,6 +105,7 @@ onBeforeUnmount(() => {
   position: relative;
   width: min(420px, calc(100vw - 24px));
   height: min(860px, calc(100vh - 32px));
+  height: min(860px, calc(100dvh - 32px));
   padding: 10px;
   border-radius: 48px;
   background:
@@ -173,6 +175,7 @@ onBeforeUnmount(() => {
   .device-shadow {
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     border-radius: 0;
   }
 
@@ -182,6 +185,9 @@ onBeforeUnmount(() => {
   }
 
   .device-screen {
+    height: 100dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     border-radius: 0;
     border: 0;
   }
