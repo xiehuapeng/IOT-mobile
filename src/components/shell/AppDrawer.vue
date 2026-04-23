@@ -5,7 +5,7 @@
       <div class="drawer-head">
         <div>
           <div class="page-kicker">Navigation</div>
-          <h3>智能体入口</h3>
+          <h3>功能入口</h3>
         </div>
         <button class="close-button" type="button" @click="$emit('close')">关闭</button>
       </div>
@@ -13,7 +13,7 @@
       <div class="profile-card">
         <div class="profile-avatar">{{ avatarText }}</div>
         <div>
-          <strong>{{ user?.name ?? "演示账号" }}</strong>
+          <strong>{{ user?.name ?? "当前账号" }}</strong>
           <p>{{ user?.organization ?? "省级运营中心" }}</p>
         </div>
       </div>
@@ -34,7 +34,7 @@
       </div>
 
       <div class="nav-group">
-        <div class="group-title">重点演示</div>
+        <div class="group-title">常用助手</div>
         <RouterLink
           v-for="agent in featuredAgents"
           :key="agent.id"
@@ -48,7 +48,7 @@
         </RouterLink>
       </div>
 
-      <button class="logout-button" type="button" @click="$emit('logout')">退出演示账号</button>
+      <button class="logout-button" type="button" @click="$emit('logout')">退出当前账号</button>
     </aside>
   </div>
 </template>
@@ -73,11 +73,12 @@ defineEmits<{
 const route = useRoute();
 
 const primaryItems = [
-  { label: "移动工作台", to: "/app/home", hint: "首页和推荐入口" },
-  { label: "智能体广场", to: "/app/plaza", hint: "完整 6 智能体入口" },
+  { label: "移动工作台", to: "/app/home", hint: "首页与最近访问" },
+  { label: "智能体广场", to: "/app/plaza", hint: "查看全部助手" },
+  { label: "我的规则", to: "/app/my-rules", hint: "查看规则、提醒与历史记录" },
 ];
 
-const avatarText = computed(() => "演示");
+const avatarText = computed(() => "账号");
 </script>
 
 <style scoped>

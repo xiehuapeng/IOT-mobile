@@ -47,9 +47,9 @@ function persistRecent(agentIds: AgentId[]) {
 
 export function loginAsDemo(name: string) {
   appState.user = {
-    name: name || "演示账号",
+    name: name || "当前账号",
     organization: "省级运营中心",
-    role: "业务体验官",
+    role: "客户经理",
   };
   persistUser(appState.user);
 }

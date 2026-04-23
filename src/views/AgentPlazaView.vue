@@ -1,16 +1,16 @@
 <template>
   <div class="page">
     <section class="plaza-hero section-card">
-      <div class="page-kicker">Agent Matrix</div>
+      <div class="page-kicker">Assistant Hub</div>
       <h2>智能体广场</h2>
-      <p>面向移动端场景集中展示 6 个智能体，每个卡片均包含图标、功能介绍和应用领域说明。</p>
+      <p>面向移动端场景集中展示各类助手，可根据当前任务快速选择合适入口。</p>
     </section>
 
     <section class="page-section">
       <div class="section-heading">
         <div>
-          <h3>重点演示智能体</h3>
-          <p>可完整体验会话、卡片、结果页闭环</p>
+          <h3>常用助手</h3>
+          <p>优先展示当前高频使用的助手。</p>
         </div>
         <span class="pill">{{ featuredAgents.length }} 个</span>
       </div>
@@ -22,8 +22,8 @@
     <section class="page-section">
       <div class="section-heading">
         <div>
-          <h3>轻量预留入口</h3>
-          <p>保留跳转与返回路径，便于后续拓展更多能力</p>
+          <h3>更多助手</h3>
+          <p>可根据后续需求继续扩展。</p>
         </div>
         <span class="pill">{{ previewAgents.length }} 个</span>
       </div>

@@ -1,42 +1,40 @@
 <template>
   <section class="login-page">
     <div class="hero-panel section-card">
-      <div class="page-kicker">Mobile Demo Portal</div>
-      <h1 class="hero-title">智能体广场</h1>
-      <p class="hero-copy">
-        以移动端 Web 仿真方式，集中展示排障、规则配置与业务办理三条重点业务链路。
-      </p>
+      <div class="page-kicker">Mobile Workspace</div>
+      <h1 class="hero-title">智能体工作台</h1>
+      <p class="hero-copy">聚合规则配置、业务排障、业务办理、查询和问答等常用助手，帮助你快速处理日常任务。</p>
       <div class="chip-grid">
-        <span class="pill">移动端仿真</span>
-        <span class="pill">Mock 驱动</span>
-        <span class="pill">领导演示向</span>
+        <span class="pill">统一入口</span>
+        <span class="pill">常用助手</span>
+        <span class="pill">移动工作台</span>
       </div>
     </div>
 
     <form class="login-card section-card" @submit.prevent="enterDemo">
       <div class="section-heading">
         <div>
-          <h3>登录进入首页</h3>
-          <p>登录仅用于进入演示流程，不涉及真实鉴权。</p>
+          <h3>登录</h3>
+          <p>登录后即可进入工作台并使用当前可用助手。</p>
         </div>
       </div>
 
       <label class="field">
         <span>账号名称</span>
-        <input v-model="accountName" type="text" placeholder="请输入演示账号名称" />
+        <input v-model="accountName" type="text" autocomplete="username" placeholder="请输入账号名称" />
       </label>
 
       <label class="field">
         <span>访问口令</span>
-        <input v-model="demoCode" type="password" placeholder="输入任意内容即可进入" />
+        <input v-model="demoCode" type="password" autocomplete="current-password" placeholder="请输入访问口令" />
       </label>
 
       <div class="tips-box">
-        <strong>演示提示</strong>
-        <p>登录后默认进入移动工作台，可通过顶部菜单或底部导航进入智能体广场。</p>
+        <strong>登录提示</strong>
+        <p>登录后默认进入移动工作台，可通过顶部菜单、底部导航或智能体广场进入不同助手。</p>
       </div>
 
-      <button class="accent-button submit" type="submit">进入首页</button>
+      <button class="accent-button submit" type="submit">进入工作台</button>
     </form>
   </section>
 </template>
@@ -48,7 +46,7 @@ import { useRouter } from "vue-router";
 import { loginAsDemo } from "../stores/appState";
 
 const router = useRouter();
-const accountName = ref("业务体验官");
+const accountName = ref("业务经理");
 const demoCode = ref("demo");
 
 function enterDemo() {

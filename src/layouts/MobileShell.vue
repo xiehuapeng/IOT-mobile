@@ -6,7 +6,7 @@
       <header class="app-bar">
         <button class="icon-button" type="button" @click="toggleDrawer">菜单</button>
         <div class="bar-title">
-          <div class="page-kicker">Agent Plaza</div>
+          <div class="page-kicker">Workspace</div>
           <strong>{{ routeTitle }}</strong>
         </div>
         <button class="icon-button" type="button" @click="handleHeaderAction">{{ headerActionLabel }}</button>
@@ -27,7 +27,7 @@
         </button>
         <button class="dock-item" type="button" :class="{ active: route.path === '/app/plaza' }" @click="router.push('/app/plaza')">
           <span>广场</span>
-          <small>6 智能体</small>
+          <small>助手入口</small>
         </button>
         <button class="dock-item" type="button" @click="openRecentAgent">
           <span>最近</span>

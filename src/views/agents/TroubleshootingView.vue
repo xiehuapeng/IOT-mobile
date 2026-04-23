@@ -1,16 +1,5 @@
 <template>
   <div class="page">
-    <section class="summary section-card">
-      <div class="page-kicker">Featured Flow</div>
-      <h2>排障智能体</h2>
-      <p>先识别问题场景，再进入订单、卡服务或 App 报错三类处理路径。</p>
-      <div class="chip-grid">
-        <span class="pill">订单执行类问题</span>
-        <span class="pill">卡服务不可用问题</span>
-        <span class="pill">App 执行报错问题</span>
-      </div>
-    </section>
-
     <ConversationThread :messages="messages" />
 
     <FlowDecisionCard
@@ -21,7 +10,7 @@
 
     <ResultPanel v-if="result" :result="result" :action-done="actionDone" @action="handleAction" />
 
-    <button class="ghost-button reset-button" type="button" @click="resetFlow">重新开始此链路</button>
+    <button class="ghost-button reset-button" type="button" @click="resetFlow">重新开始</button>
   </div>
 </template>
 
@@ -85,10 +74,7 @@ function handleSubmit(payload: Record<string, string | string[]>) {
     const detected = classifyTroubleshoot(description, String(payload.scenarioHint ?? ""));
     scenario.value = detected;
     phase.value = "detail";
-    pushMessage(
-      "assistant",
-      `已识别为“${getTroubleshootSceneLabel(detected)}”。我将根据该场景继续采集关键上下文，并给出处置建议。`,
-    );
+    pushMessage("assistant", `已识别为“${getTroubleshootSceneLabel(detected)}”，请继续补充关键信息。`);
     return;
   }
 
@@ -103,7 +89,7 @@ function handleSubmit(payload: Record<string, string | string[]>) {
 function handleAction() {
   if (!result.value || actionDone.value) return;
   actionDone.value = true;
-  pushMessage("system", `处置工单已生成，单号 WO-20260422-018，关联模板 ${result.value.reference}。`, "success");
+  pushMessage("system", `处置工单已生成，关联模板 ${result.value.reference}。`, "success");
 }
 
 const currentStep = computed(() => {
@@ -119,16 +105,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.summary {
-  padding: 20px;
-}
-
-.summary p {
-  margin: 10px 0 16px;
-  color: var(--text-secondary);
-  line-height: 1.7;
-}
-
 .reset-button {
   width: 100%;
   padding: 14px 16px;

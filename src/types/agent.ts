@@ -87,6 +87,141 @@ export interface FlowResult {
   reference?: string;
 }
 
+export type RuleIntent = "alert" | "order-monitor" | "unsupported";
+export type RuleEntryMode = "quick-alert" | "quick-order" | "natural-language" | "edit";
+export type RuleObjectType = "group" | "account" | "customer" | "order";
+export type RuleAlertType = "red-list-expiry" | "arrears-risk" | "plan-expiry" | "contract-renewal";
+export type RuleAlertTimingMode = "days-before" | "workdays-before" | "condition-hit";
+export type RuleMonitorCondition = "in-progress" | "failed" | "timeout" | "status-change";
+export type RuleMonitorTimingMode = "hours-timeout" | "days-timeout" | "status-change" | "scheduled-summary";
+export type RuleFrequency = "once" | "daily" | "weekly" | "until-handled" | "instant" | "summary-daily" | "scheduled-window";
+export type RuleNotificationChannel = "notification-center" | "message";
+export type RuleEffectivePeriod = "long-term" | "time-range" | "one-time" | "until-complete";
+export type RuleStatus = "active" | "paused" | "expired" | "pending";
+export type RuleExecutionMode = "event-trigger" | "scheduled-scan" | "status-event" | "async-scan" | "summary-check";
+export type RuleIssueType = "object" | "rule" | "duplicate" | "capacity";
+export type RuleIssueSeverity = "error" | "warning" | "info";
+export type RuleAlertStatus = "new" | "tracking" | "resolved" | "paused";
+
+export interface RuleFieldOption {
+  label: string;
+  value: string;
+  hint?: string;
+}
+
+export interface RuleField {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "number" | "radio" | "chips" | "select" | "date";
+  required?: boolean;
+  placeholder?: string;
+  helper?: string;
+  min?: number;
+  max?: number;
+  options?: RuleFieldOption[];
+}
+
+export interface RuleQuickEntry {
+  id: RuleEntryMode;
+  title: string;
+  description: string;
+  tag: string;
+}
+
+export interface RuleIntentMatch {
+  intent: RuleIntent;
+  reason: string;
+  suggestedAgentId?: AgentId;
+}
+
+export interface RuleFormValues {
+  naturalRequest?: string;
+  ruleName?: string;
+  objectType?: RuleObjectType;
+  objectValue?: string;
+  alertType?: RuleAlertType;
+  alertTimingMode?: RuleAlertTimingMode;
+  alertOffset?: string;
+  alertFrequency?: RuleFrequency;
+  notifyChannels?: string[];
+  effectivePeriod?: RuleEffectivePeriod;
+  effectiveStart?: string;
+  effectiveEnd?: string;
+  monitorCondition?: RuleMonitorCondition;
+  monitorTimingMode?: RuleMonitorTimingMode;
+  monitorThreshold?: string;
+  monitorSummaryTime?: string;
+  monitorFrequency?: RuleFrequency;
+}
+
+export interface RuleIssue {
+  type: RuleIssueType;
+  severity: RuleIssueSeverity;
+  title: string;
+  detail: string;
+}
+
+export interface RuleValidationGroup {
+  key: RuleIssueType;
+  title: string;
+  issues: RuleIssue[];
+}
+
+export interface RuleValidationResult {
+  passed: boolean;
+  groups: RuleValidationGroup[];
+  summary: string;
+}
+
+export interface RuleSummaryItem {
+  label: string;
+  value: string;
+}
+
+export interface RuleSummary {
+  title: string;
+  description: string;
+  items: RuleSummaryItem[];
+  executionMode: RuleExecutionMode;
+  executionLabel: string;
+  note: string;
+}
+
+export interface ManagedRule {
+  id: string;
+  name: string;
+  intent: Exclude<RuleIntent, "unsupported">;
+  objectType: RuleObjectType;
+  objectValue: string;
+  primaryCondition: string;
+  frequencyLabel: string;
+  notifyChannels: RuleNotificationChannel[];
+  effectiveLabel: string;
+  executionMode: RuleExecutionMode;
+  executionLabel: string;
+  status: RuleStatus;
+  createdAt: string;
+  createdBy: string;
+  values: RuleFormValues;
+  summary: RuleSummary;
+}
+
+export interface RuleAlertRecord {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  ruleTypeLabel: string;
+  objectValue: string;
+  currentStatus: string;
+  reason: string;
+  triggeredAt: string;
+  recommendation: string;
+  notificationChannels: RuleNotificationChannel[];
+  followUpStatus: RuleAlertStatus;
+  suggestedAgentId?: AgentId;
+  suggestedRoute?: string;
+}
+
 export function isAgentId(value: string): value is AgentId {
   return agentIds.includes(value as AgentId);
 }

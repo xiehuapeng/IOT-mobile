@@ -2,16 +2,16 @@
   <section class="section-card result-card" :class="result.status">
     <div class="result-head">
       <div>
-        <div class="page-kicker">Flow Result</div>
+        <div class="page-kicker">Result</div>
         <h3>{{ result.title }}</h3>
       </div>
-      <span class="pill">{{ result.reference ?? "Mock" }}</span>
+      <span class="pill">{{ result.reference ?? "已生成" }}</span>
     </div>
 
     <p class="result-summary">{{ result.summary }}</p>
 
     <div class="next-actions">
-      <strong>后续动作</strong>
+      <strong>后续处理</strong>
       <ul>
         <li v-for="item in result.nextActions" :key="item">{{ item }}</li>
       </ul>

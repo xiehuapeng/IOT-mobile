@@ -5,9 +5,9 @@
       <div class="splash-orb splash-orb-a"></div>
       <div class="splash-orb splash-orb-b"></div>
       <div class="splash-card">
-        <div class="splash-kicker">Mobile Agent POC</div>
-        <h1>智能体广场</h1>
-        <p>面向业务演示的移动端仿真体验</p>
+        <div class="splash-kicker">Mobile Workspace</div>
+        <h1>智能体工作台</h1>
+        <p>围绕常用业务场景提供统一入口与协同处理能力</p>
         <div class="splash-loader">
           <span></span>
           <span></span>

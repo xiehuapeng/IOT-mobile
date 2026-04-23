@@ -1,14 +1,12 @@
 <template>
   <div class="page">
     <section class="hero section-card">
-      <div class="page-kicker">Welcome Back</div>
-      <h2>{{ appState.user?.name ?? "演示账号" }}，欢迎进入移动工作台</h2>
-      <p>
-        当前首页聚合了业务入口、重点智能体推荐和最近使用记录，适合作为演示开场页。
-      </p>
+      <div class="page-kicker">Workspace</div>
+      <h2>{{ appState.user?.name ?? "当前账号" }}，欢迎进入移动工作台</h2>
+      <p>当前首页聚合了高频助手入口、最近访问记录和规则管理入口，方便快速进入常用场景。</p>
       <div class="hero-actions">
         <RouterLink class="accent-button hero-button" to="/app/plaza">进入智能体广场</RouterLink>
-        <RouterLink class="ghost-button hero-button" :to="featuredAgents[0].route">直接体验排障链路</RouterLink>
+        <RouterLink class="ghost-button hero-button" to="/app/my-rules">我的规则</RouterLink>
       </div>
     </section>
 
@@ -22,8 +20,8 @@
     <section class="page-section">
       <div class="section-heading">
         <div>
-          <h3>推荐智能体</h3>
-          <p>三条重点链路已可完整体验</p>
+          <h3>常用助手</h3>
+          <p>围绕排障、规则配置和业务办理等高频场景提供快速入口。</p>
         </div>
       </div>
       <div class="card-grid">
@@ -34,8 +32,8 @@
     <section class="page-section section-card recent-panel">
       <div class="section-heading">
         <div>
-          <h3>最近使用</h3>
-          <p>根据演示体验自动记录最近访问入口</p>
+          <h3>最近访问</h3>
+          <p>根据使用记录自动保留最近进入的助手。</p>
         </div>
       </div>
       <div class="recent-list">
@@ -52,8 +50,8 @@
     <section class="page-section section-card moment-panel">
       <div class="section-heading">
         <div>
-          <h3>演示节奏建议</h3>
-          <p>首页建议用 30 秒建立整体认知</p>
+          <h3>工作建议</h3>
+          <p>从首页进入常用助手，可以更快完成当前任务。</p>
         </div>
       </div>
       <ol class="moment-list">
