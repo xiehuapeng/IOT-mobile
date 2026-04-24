@@ -55,22 +55,20 @@
     <div class="result-foot">
       <div>
         <strong>客户经理后续操作</strong>
-        <p>可继续补充信息、执行轻量动作、转人工坐席，或结束本次处理。</p>
+        <p>可选择转人工处理，或在具备自动动作时执行处理。</p>
       </div>
     </div>
 
-    <div class="chip-grid">
-      <button class="ghost-button action-button" type="button" @click="$emit('action', 'continue')">继续排查</button>
+    <div class="chip-grid result-actions">
+      <button class="ghost-button action-button" type="button" @click="$emit('action', 'handoff')">人工处理</button>
       <button
+        v-if="!executionTrace"
         class="accent-button action-button"
         type="button"
-        :disabled="!result.executableActions.length"
         @click="$emit('action', 'execute')"
       >
         执行处理
       </button>
-      <button class="ghost-button action-button" type="button" @click="$emit('action', 'handoff')">转人工客服</button>
-      <button class="ghost-button action-button" type="button" @click="$emit('action', 'finish')">结束</button>
     </div>
   </section>
 </template>
@@ -93,3 +91,84 @@ defineEmits<{
   action: [action: TroubleshootingActionId];
 }>();
 </script>
+
+<style scoped>
+.result-card {
+  padding: 18px;
+}
+
+.result-card.success {
+  border-color: rgba(84, 213, 145, 0.34);
+}
+
+.result-card.warning {
+  border-color: rgba(255, 185, 92, 0.32);
+}
+
+.result-head,
+.result-foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.result-head > div,
+.result-foot > div {
+  min-width: 0;
+}
+
+.result-head h3 {
+  margin: 6px 0 0;
+  line-height: 1.35;
+}
+
+.result-head .pill {
+  flex-shrink: 0;
+}
+
+.result-summary {
+  margin: 18px 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.next-actions {
+  margin-top: 18px;
+}
+
+.next-actions strong,
+.result-foot strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.next-actions ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.result-foot {
+  margin-top: 18px;
+}
+
+.result-foot p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.result-actions {
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.action-button {
+  min-width: 112px;
+  padding: 12px 14px;
+}
+
+</style>
