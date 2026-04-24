@@ -110,6 +110,221 @@ export const executionLabels: Record<RuleExecutionMode, string> = {
   "summary-check": "汇总检查",
 };
 
+type SupportedRuleIntent = Exclude<RuleIntent, "unsupported">;
+
+interface ParsedObjectMatch {
+  objectType?: RuleObjectType;
+  objectValue?: string;
+}
+
+export interface NaturalRuleDraftResult {
+  intentMatch: RuleIntentMatch;
+  values: RuleFormValues;
+  missingLabels: string[];
+  validationResult: RuleValidationResult | null;
+  summary: RuleSummary | null;
+}
+
+function detectObjectMatch(request: string, intent: SupportedRuleIntent): ParsedObjectMatch {
+  const text = request.trim();
+
+  for (const [objectType, candidates] of Object.entries(existingObjects) as Array<[RuleObjectType, string[]]>) {
+    if (intent === "alert" && objectType === "order") continue;
+    if (intent === "order-monitor" && objectType === "account") continue;
+
+    const matched = candidates.find((candidate) => text.includes(candidate));
+    if (matched) {
+      return { objectType, objectValue: matched };
+    }
+  }
+
+  if (intent === "alert") {
+    if (text.includes("集团")) return { objectType: "group" };
+    if (text.includes("账户")) return { objectType: "account" };
+    if (text.includes("客户")) return { objectType: "customer" };
+  }
+
+  if (intent === "order-monitor") {
+    if (text.includes("订单")) return { objectType: "order" };
+    if (text.includes("集团")) return { objectType: "group" };
+    if (text.includes("客户")) return { objectType: "customer" };
+  }
+
+  return {};
+}
+
+function inferNotifyChannels(request: string): RuleNotificationChannel[] {
+  const channels: RuleNotificationChannel[] = [];
+  if (request.includes("通知中心")) channels.push("notification-center");
+  if (request.includes("消息")) channels.push("message");
+  return channels.length ? channels : ["notification-center"];
+}
+
+function inferAlertValues(request: string, baseValues: RuleFormValues): RuleFormValues {
+  const values: RuleFormValues = {
+    ...baseValues,
+    alertFrequency: "once",
+    notifyChannels: inferNotifyChannels(request),
+    effectivePeriod: "long-term",
+  };
+
+  if (request.includes("红名单")) {
+    values.alertType = "red-list-expiry";
+    values.alertTimingMode = "days-before";
+  } else if (request.includes("欠费")) {
+    values.alertType = "arrears-risk";
+    values.alertTimingMode = "condition-hit";
+  } else if (request.includes("套餐到期") || request.includes("长周期套餐")) {
+    values.alertType = "plan-expiry";
+    values.alertTimingMode = request.includes("工作日") ? "workdays-before" : "days-before";
+  } else if (request.includes("到期")) {
+    values.alertType = "contract-renewal";
+    values.alertTimingMode = request.includes("工作日") ? "workdays-before" : "days-before";
+  }
+
+  if (request.includes("工作日")) {
+    values.alertTimingMode = "workdays-before";
+  } else if (request.includes("达到条件") || request.includes("有风险时") || request.includes("出现")) {
+    values.alertTimingMode = "condition-hit";
+  }
+
+  if (request.includes("每天") || request.includes("每日")) {
+    values.alertFrequency = "daily";
+  } else if (request.includes("每周")) {
+    values.alertFrequency = "weekly";
+  } else if (request.includes("持续")) {
+    values.alertFrequency = "until-handled";
+  }
+
+  return values;
+}
+
+function inferOrderValues(request: string, baseValues: RuleFormValues): RuleFormValues {
+  const values: RuleFormValues = {
+    ...baseValues,
+    notifyChannels: inferNotifyChannels(request),
+    effectivePeriod: "until-complete",
+  };
+
+  if (baseValues.objectType === "order") {
+    values.monitorFrequency = "instant";
+  } else if (baseValues.objectType === "group" || baseValues.objectType === "customer") {
+    values.monitorFrequency = "summary-daily";
+    values.monitorScope = "all-orders";
+  }
+
+  if (request.includes("失败")) {
+    values.monitorCondition = "failed";
+    values.monitorTimingMode = "status-change";
+    values.monitorThreshold = "执行失败即提醒";
+  } else if (request.includes("状态变化") || request.includes("状态变更")) {
+    values.monitorCondition = "status-change";
+    values.monitorTimingMode = "status-change";
+    values.monitorThreshold = "状态变化即提醒";
+  } else if (request.includes("超时") || request.includes("未完成")) {
+    values.monitorCondition = "timeout";
+    values.monitorTimingMode = request.includes("天") ? "days-timeout" : "hours-timeout";
+    const thresholdMatch = request.match(/(\d+)\s*(天|小时|h|H)/);
+    if (thresholdMatch) {
+      values.monitorThreshold = thresholdMatch[1];
+      values.monitorTimingMode = thresholdMatch[2].includes("天") ? "days-timeout" : "hours-timeout";
+    }
+  } else if (request.includes("执行中")) {
+    values.monitorCondition = "in-progress";
+    values.monitorTimingMode = "status-change";
+    values.monitorThreshold = "执行中状态变化即提醒";
+  }
+
+  if (baseValues.objectType === "group" || baseValues.objectType === "customer") {
+    const matchedOrder = existingObjects.order.find((candidate) => request.includes(candidate));
+    if (matchedOrder) {
+      values.monitorScope = "specific-order";
+      values.monitorSpecificOrder = matchedOrder;
+      values.monitorFrequency = "instant";
+    }
+  }
+
+  if (request.includes("每日汇总") || request.includes("每天汇总")) {
+    values.monitorFrequency = "summary-daily";
+    values.monitorTimingMode = "scheduled-summary";
+    values.monitorSummaryTime = "每天 18:00";
+  } else if (request.includes("指定时段")) {
+    values.monitorFrequency = "scheduled-window";
+  }
+
+  if (!values.monitorFrequency) {
+    values.monitorFrequency = values.objectType === "order" ? "instant" : "summary-daily";
+  }
+
+  return values;
+}
+
+function buildSuggestedRuleName(intent: SupportedRuleIntent, values: RuleFormValues, request: string) {
+  if (intent === "alert" && values.objectValue && values.alertType) {
+    return `${values.objectValue}${alertTypeLabels[values.alertType]}`;
+  }
+
+  if (intent === "order-monitor" && values.objectValue && values.monitorCondition) {
+    return `${values.objectValue}${monitorConditionLabels[values.monitorCondition]}提醒`;
+  }
+
+  return request.slice(0, 18);
+}
+
+export function buildNaturalRuleDraft(
+  request: string,
+  existingRules: ManagedRule[],
+  editingRuleId?: string | null,
+): NaturalRuleDraftResult {
+  const intentMatch = detectRuleIntent(request);
+
+  if (intentMatch.intent === "unsupported") {
+    return {
+      intentMatch,
+      values: { naturalRequest: request },
+      missingLabels: [],
+      validationResult: null,
+      summary: null,
+    };
+  }
+
+  const objectMatch = detectObjectMatch(request, intentMatch.intent);
+  const baseValues: RuleFormValues = {
+    naturalRequest: request,
+    ...objectMatch,
+  };
+
+  const values =
+    intentMatch.intent === "alert"
+      ? inferAlertValues(request, baseValues)
+      : inferOrderValues(request, baseValues);
+
+  values.ruleName = buildSuggestedRuleName(intentMatch.intent, values, request);
+
+  const missingLabels = getRuleFields(intentMatch.intent, values)
+    .filter((field) => field.required)
+    .filter((field) => {
+      const value = values[field.id as keyof RuleFormValues];
+      return Array.isArray(value) ? value.length === 0 : !String(value ?? "").trim();
+    })
+    .map((field) => field.label);
+
+  const validationResult =
+    missingLabels.length === 0 ? validateRuleForm(intentMatch.intent, values, existingRules, editingRuleId) : null;
+  const summary =
+    missingLabels.length === 0 && validationResult && (validationResult.passed || validationResult.allowDuplicateContinue)
+      ? buildRuleSummary(intentMatch.intent, values)
+      : null;
+
+  return {
+    intentMatch,
+    values,
+    missingLabels,
+    validationResult,
+    summary,
+  };
+}
+
 export function detectRuleIntent(request: string): RuleIntentMatch {
   const text = request.trim().toLowerCase();
 
