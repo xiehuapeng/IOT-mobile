@@ -39,10 +39,25 @@
         <RuleEntryPanel
           v-if="stage === 'entry'"
           :request="naturalRequest"
+          :disabled="Boolean(analysisProgress)"
           @update:request="naturalRequest = $event"
           @quick-entry="startQuickEntry"
           @submit-request="submitNaturalRequest"
         />
+
+        <div v-else-if="stage === 'processing' && analysisProgress" class="assistant-card-shell">
+          <div class="assistant-card-head">
+            <span class="assistant-badge">助手卡片</span>
+            <strong>{{ analysisProgress.title }}</strong>
+          </div>
+          <section class="progress-panel">
+            <p>{{ analysisProgress.detail }}</p>
+            <div class="progress-track" aria-hidden="true">
+              <span class="progress-fill" :style="{ width: `${analysisProgress.percent}%` }"></span>
+            </div>
+            <small>已完成 {{ analysisProgress.percent }}%</small>
+          </section>
+        </div>
 
         <div v-else-if="stage === 'unsupported'" class="assistant-card-shell">
           <div class="assistant-card-head">
@@ -149,9 +164,9 @@ import RuleEntryPanel from "../../components/rule/RuleEntryPanel.vue";
 import RuleSummaryPanel from "../../components/rule/RuleSummaryPanel.vue";
 import RuleValidationPanel from "../../components/rule/RuleValidationPanel.vue";
 import {
+  buildNaturalRuleDraft,
   buildRuleSummary,
   createManagedRule,
-  detectRuleIntent,
   getRuleFields,
   unsupportedRoutingTips,
   validateRuleForm,
@@ -169,7 +184,13 @@ import type {
   RuleValidationResult,
 } from "../../types/agent";
 
-type RuleStage = "entry" | "unsupported" | "config" | "validation" | "summary" | "created" | "alerts";
+type RuleStage = "entry" | "processing" | "unsupported" | "config" | "validation" | "summary" | "created" | "alerts";
+
+interface AnalysisProgressState {
+  title: string;
+  detail: string;
+  percent: number;
+}
 
 const route = useRoute();
 const router = useRouter();
@@ -186,6 +207,7 @@ const createdRule = ref<ManagedRule | null>(null);
 const formError = ref("");
 const messages = ref<ConversationMessage[]>([]);
 const editingRuleId = ref<string | null>(null);
+const analysisProgress = ref<AnalysisProgressState | null>(null);
 
 const previewAlerts = computed(() =>
   createdRule.value ? ruleCenter.alerts.filter((item) => item.ruleId === createdRule.value?.id) : recentAlerts.value,
@@ -253,6 +275,7 @@ function resetFlow() {
   createdRule.value = null;
   formError.value = "";
   editingRuleId.value = null;
+  analysisProgress.value = null;
   messages.value = [];
   pushMessage("assistant", "你好，我是规则配置类助手。");
   pushMessage("assistant", "我可以帮你完成预警提醒配置和订单执行监控配置。你可以点下方快捷场景，也可以直接输入诉求。");
@@ -261,6 +284,7 @@ function resetFlow() {
 function backToEntry() {
   stage.value = "entry";
   formError.value = "";
+  analysisProgress.value = null;
   pushMessage("assistant", "好的，我们回到聊天入口。你可以重新选择场景，或者直接输入新的诉求。");
 }
 
@@ -281,31 +305,89 @@ function startQuickEntry(entry: RuleEntryMode) {
   );
 }
 
-function submitNaturalRequest() {
+function waitFor(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function runAnalysisStep(title: string, detail: string, percent: number, delay = 320) {
+  analysisProgress.value = { title, detail, percent };
+  await waitFor(delay);
+}
+
+function buildMissingMessage(labels: string[]) {
+  return `我先帮你识别出一部分参数，并已经替你填进卡片了。\n还需要你补充：${labels.join("、")}。`;
+}
+
+async function submitNaturalRequest() {
   if (!naturalRequest.value.trim()) {
     formError.value = "请输入诉求后再继续。";
     return;
   }
-  formError.value = "";
-  pushMessage("user", naturalRequest.value.trim());
-  const result = detectRuleIntent(naturalRequest.value);
-  unsupportedReason.value = result.reason;
-  unsupportedAgentId.value = result.suggestedAgentId;
 
-  if (result.intent === "unsupported") {
+  formError.value = "";
+  const request = naturalRequest.value.trim();
+  pushMessage("user", request);
+  stage.value = "processing";
+
+  await runAnalysisStep("正在读你的诉求", "我先把这句话拆成监控对象、触发条件和提醒方式。", 20);
+  const draft = buildNaturalRuleDraft(request, ruleCenter.rules, editingRuleId.value);
+
+  await runAnalysisStep(
+    "正在判断你想做什么",
+    draft.intentMatch.intent === "alert"
+      ? "我判断你更像是在配置预警提醒，我继续往下整理。"
+      : draft.intentMatch.intent === "order-monitor"
+        ? "我判断你是在配置订单执行监控，我继续帮你补成规则草稿。"
+        : "我先帮你确认这条诉求是不是规则配置范围。",
+    46,
+  );
+
+  unsupportedReason.value = draft.intentMatch.reason;
+  unsupportedAgentId.value = draft.intentMatch.suggestedAgentId;
+
+  if (draft.intentMatch.intent === "unsupported") {
+    await runAnalysisStep("正在为你找更合适的助手", "这条诉求不太像规则配置，我帮你切到更匹配的处理入口。", 100, 260);
+    analysisProgress.value = null;
     stage.value = "unsupported";
-    pushMessage("assistant", result.reason, "warning");
+    pushMessage("assistant", draft.intentMatch.reason, "warning");
     naturalRequest.value = "";
     return;
   }
 
-  currentIntent.value = result.intent;
+  currentIntent.value = draft.intentMatch.intent;
+  formValues.value = draft.values;
+
+  await runAnalysisStep("正在整理配置草稿", "能识别出来的参数我已经先替你填进卡片里，马上给你看。", 72);
+
+  if (draft.missingLabels.length > 0) {
+    await runAnalysisStep("还有几项需要你拍板", "我已经把草稿铺好了，缺的地方你补一下就能继续。", 100, 260);
+    analysisProgress.value = null;
+    validationResult.value = null;
+    ruleSummary.value = null;
+    stage.value = "config";
+    pushMessage("assistant", buildMissingMessage(draft.missingLabels), "warning");
+    naturalRequest.value = "";
+    return;
+  }
+
+  validationResult.value = draft.validationResult;
+  ruleSummary.value = draft.summary;
+
+  if (draft.summary) {
+    await runAnalysisStep("配置草稿已经准备好", "这份规则我已经替你拼好了，你确认一下就可以直接创建。", 100, 260);
+    analysisProgress.value = null;
+    stage.value = "summary";
+    pushMessage("assistant", "已为你生成配置草稿，请确认是否创建。", "success");
+    naturalRequest.value = "";
+    return;
+  }
+
+  await runAnalysisStep("我发现这份草稿还需要你确认", "参数虽然齐了，但有几项校验结果我想先让你看一下。", 100, 260);
+  analysisProgress.value = null;
   stage.value = "config";
-  formValues.value = {
-    naturalRequest: naturalRequest.value,
-    ruleName: naturalRequest.value.slice(0, 18),
-  };
-  pushMessage("assistant", "已识别你的诉求，下面进入结构化配置。", "success");
+  if (draft.validationResult) {
+    pushMessage("assistant", draft.validationResult.summary, "warning");
+  }
   naturalRequest.value = "";
 }
 
@@ -403,6 +485,7 @@ watch(
     formValues.value = cloneRuleFormValues(target.values);
     stage.value = "config";
     messages.value = [];
+    analysisProgress.value = null;
     pushMessage("assistant", `已进入规则编辑，你可以直接调整“${target.name}”的配置。`);
   },
   { immediate: true },
@@ -541,6 +624,47 @@ onMounted(() => {
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+}
+
+.progress-panel {
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(154, 196, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(17, 46, 91, 0.86), rgba(7, 24, 46, 0.92)),
+    rgba(8, 27, 56, 0.78);
+  box-shadow:
+    0 18px 40px rgba(2, 10, 24, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.progress-panel p {
+  margin: 0;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.progress-track {
+  height: 10px;
+  margin-top: 16px;
+  border-radius: 999px;
+  background: rgba(8, 24, 46, 0.8);
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(84, 189, 255, 0.92), rgba(106, 225, 255, 0.92));
+  box-shadow: 0 0 18px rgba(92, 201, 255, 0.28);
+  transition: width 0.24s ease;
+}
+
+.progress-panel small {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--text-muted);
 }
 
 .assistant-card-shell {

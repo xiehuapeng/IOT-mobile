@@ -11,6 +11,7 @@
         :key="item.id"
         class="scenario-card"
         type="button"
+        :disabled="disabled"
         @click="$emit('quick-entry', item.id)"
       >
         <div class="scenario-head">
@@ -27,6 +28,7 @@
         :value="request"
         rows="1"
         class="composer-input"
+        :disabled="disabled"
         placeholder="直接输入你的诉求，按 Enter 发送，Shift + Enter 换行"
         @input="handleInput"
         @keydown="handleKeydown"
@@ -43,6 +45,7 @@ import type { RuleEntryMode } from "../../types/agent";
 
 defineProps<{
   request: string;
+  disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -123,6 +126,11 @@ function handleKeydown(event: KeyboardEvent) {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+.scenario-card:disabled {
+  opacity: 0.58;
+  cursor: default;
+}
+
 .scenario-head {
   display: flex;
   align-items: flex-start;
@@ -164,6 +172,11 @@ function handleKeydown(event: KeyboardEvent) {
   background: transparent;
   color: var(--text-main);
   line-height: 1.7;
+}
+
+.composer-input:disabled {
+  opacity: 0.7;
+  cursor: default;
 }
 
 .composer-input::placeholder {
