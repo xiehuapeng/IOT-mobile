@@ -98,11 +98,29 @@ export type RuleMonitorScope = "all-orders" | "specific-order";
 export type RuleFrequency = "once" | "daily" | "weekly" | "until-handled" | "instant" | "summary-daily" | "scheduled-window";
 export type RuleNotificationChannel = "notification-center" | "message";
 export type RuleEffectivePeriod = "long-term" | "time-range" | "one-time" | "until-complete";
-export type RuleStatus = "active" | "paused" | "expired" | "pending";
+export type RuleStatus =
+  | "draft"
+  | "pending-confirmation"
+  | "creating"
+  | "create-failed"
+  | "pending"
+  | "active"
+  | "paused"
+  | "error"
+  | "completed"
+  | "expired"
+  | "terminated";
 export type RuleExecutionMode = "event-trigger" | "scheduled-scan" | "status-event" | "async-scan" | "summary-check";
 export type RuleIssueType = "object" | "rule" | "duplicate" | "capacity";
 export type RuleIssueSeverity = "error" | "warning" | "info";
-export type RuleAlertStatus = "new" | "tracking" | "resolved" | "paused";
+export type RuleAlertStatus = "new" | "tracking" | "resolved" | "paused" | "snoozed" | "ignored";
+export type RuleRiskLevel = "high" | "medium" | "low";
+
+export interface RuleStatusHistoryItem {
+  status: RuleStatus;
+  timestamp: string;
+  note: string;
+}
 
 export interface RuleFieldOption {
   label: string;
@@ -210,6 +228,9 @@ export interface ManagedRule {
   createdBy: string;
   values: RuleFormValues;
   summary: RuleSummary;
+  bindingLabel?: string;
+  latestFailureReason?: string;
+  statusHistory: RuleStatusHistoryItem[];
 }
 
 export interface RuleAlertRecord {
@@ -224,6 +245,9 @@ export interface RuleAlertRecord {
   recommendation: string;
   notificationChannels: RuleNotificationChannel[];
   followUpStatus: RuleAlertStatus;
+  riskLevel: RuleRiskLevel;
+  handlingStatus: string;
+  secondaryReminderHint?: string;
   suggestedAgentId?: AgentId;
   suggestedRoute?: string;
 }

@@ -2,10 +2,10 @@
   <section class="result-panel">
     <div class="section-heading">
       <div>
-        <h3>规则创建成功</h3>
-        <p>当前规则已保存，可继续查看管理信息或进入提醒记录。</p>
+        <h3>{{ panelTitle }}</h3>
+        <p>{{ panelDesc }}</p>
       </div>
-      <span class="pill">{{ rule.status === "pending" ? "待生效" : "生效中" }}</span>
+      <span class="pill">{{ statusLabel }}</span>
     </div>
 
     <div class="summary-grid">
@@ -16,26 +16,74 @@
       <div class="summary-item"><span>监控对象</span><strong>{{ rule.objectValue }}</strong></div>
       <div v-if="rule.intent === 'order-monitor'" class="summary-item"><span>监控范围</span><strong>{{ rule.scopeLabel }}</strong></div>
       <div class="summary-item"><span>执行方式</span><strong>{{ rule.executionLabel }}</strong></div>
+      <div class="summary-item"><span>处理策略</span><strong>{{ rule.bindingLabel ?? rule.executionLabel }}</strong></div>
+    </div>
+
+    <div v-if="rule.latestFailureReason" class="failure-box">
+      <strong>失败兜底</strong>
+      <p>{{ rule.latestFailureReason }}</p>
+      <p>已保留当前配置，可重新提交、保存为草稿，或回到配置卡片继续调整。</p>
+    </div>
+
+    <div class="history-box">
+      <strong>生命周期</strong>
+      <div class="history-list">
+        <div v-for="item in rule.statusHistory" :key="`${item.status}-${item.timestamp}`" class="history-item">
+          <span>{{ item.timestamp }}</span>
+          <strong>{{ statusText(item.status) }}</strong>
+          <p>{{ item.note }}</p>
+        </div>
+      </div>
     </div>
 
     <div class="action-row">
       <button class="ghost-button action-button" type="button" @click="$emit('manage')">前往规则中心</button>
-      <button class="accent-button action-button" type="button" @click="$emit('preview-alerts')">查看提醒记录</button>
+      <button v-if="rule.status === 'create-failed'" class="ghost-button action-button" type="button" @click="$emit('save-draft')">
+        保存为草稿
+      </button>
+      <button v-if="rule.status === 'create-failed'" class="accent-button action-button" type="button" @click="$emit('retry')">
+        重新提交
+      </button>
+      <button
+        v-else
+        class="accent-button action-button"
+        type="button"
+        @click="$emit('preview-alerts')"
+      >
+        查看提醒记录
+      </button>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+
+import { ruleStatusLabels } from "../../mock/ruleAssistant";
 import type { ManagedRule } from "../../types/agent";
 
-defineProps<{
+const props = defineProps<{
   rule: ManagedRule;
 }>();
 
 defineEmits<{
   manage: [];
   "preview-alerts": [];
+  retry: [];
+  "save-draft": [];
 }>();
+
+const statusLabel = computed(() => ruleStatusLabels[props.rule.status]);
+const panelTitle = computed(() => (props.rule.status === "create-failed" ? "规则创建未完成" : "规则创建成功"));
+const panelDesc = computed(() =>
+  props.rule.status === "create-failed"
+    ? "当前规则在绑定执行链路时遇到异常，已保留配置，方便你继续处理。"
+    : "当前规则已保存，可继续查看生命周期、管理信息和提醒记录。",
+);
+
+function statusText(status: ManagedRule["status"]) {
+  return ruleStatusLabels[status];
+}
 </script>
 
 <style scoped>
@@ -58,7 +106,8 @@ defineEmits<{
   margin-top: 18px;
 }
 
-.summary-item {
+.summary-item,
+.history-item {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -68,9 +117,32 @@ defineEmits<{
   border: 1px solid rgba(154, 196, 255, 0.12);
 }
 
-.summary-item span {
+.summary-item span,
+.history-item span {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.failure-box,
+.history-box {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 183, 82, 0.2);
+  background: rgba(53, 43, 20, 0.34);
+}
+
+.failure-box p,
+.history-item p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.history-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .action-row {
