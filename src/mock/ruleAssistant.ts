@@ -34,13 +34,13 @@ export const ruleQuickEntries: RuleQuickEntry[] = [
   {
     id: "quick-alert",
     title: "预警提醒配置",
-    description: "用于红名单到期、欠费风险、长周期套餐到期等提醒配置。",
+    description: "用于预警提醒规则配置。",
     tag: "一级入口",
   },
   {
     id: "quick-order",
     title: "订单执行监控配置",
-    description: "用于订单执行中、失败、超时未完成、状态变化的监控提醒。",
+    description: "用于订单执行状态监控。",
     tag: "一级入口",
   },
 ];
@@ -173,7 +173,6 @@ function detectObjectMatch(request: string, intent: SupportedRuleIntent): Parsed
   if (intent === "alert") {
     if (text.includes("集团")) return { objectType: "group" };
     if (text.includes("账户")) return { objectType: "account" };
-    if (text.includes("客户")) return { objectType: "customer" };
   }
 
   if (intent === "order-monitor") {
@@ -197,7 +196,7 @@ function detectDemoObjectAlias(text: string, intent: SupportedRuleIntent): Parse
 
 function searchableObjectTypes(intent: SupportedRuleIntent, objectType?: RuleObjectType) {
   if (objectType) return [objectType];
-  return intent === "alert" ? (["group", "account", "customer"] as RuleObjectType[]) : (["order", "group", "customer"] as RuleObjectType[]);
+  return intent === "alert" ? (["group", "account"] as RuleObjectType[]) : (["order", "group", "customer"] as RuleObjectType[]);
 }
 
 export function resolveRuleObject(
@@ -261,11 +260,8 @@ export function resolveRuleObject(
   };
 }
 
-function inferNotifyChannels(request: string): RuleNotificationChannel[] {
-  const channels: RuleNotificationChannel[] = [];
-  if (request.includes("通知中心")) channels.push("notification-center");
-  if (request.includes("消息")) channels.push("message");
-  return channels.length ? channels : ["notification-center"];
+function inferNotifyChannels(_request: string): RuleNotificationChannel[] {
+  return ["notification-center"];
 }
 
 function inferAlertValues(request: string, baseValues: RuleFormValues): RuleFormValues {
@@ -284,16 +280,19 @@ function inferAlertValues(request: string, baseValues: RuleFormValues): RuleForm
     values.alertTimingMode = "condition-hit";
   } else if (request.includes("套餐到期") || request.includes("长周期套餐")) {
     values.alertType = "plan-expiry";
-    values.alertTimingMode = request.includes("工作日") ? "workdays-before" : "days-before";
+    values.alertTimingMode = "days-before";
   } else if (request.includes("到期")) {
     values.alertType = "contract-renewal";
-    values.alertTimingMode = request.includes("工作日") ? "workdays-before" : "days-before";
+    values.alertTimingMode = "days-before";
   }
 
-  if (request.includes("工作日")) {
-    values.alertTimingMode = "workdays-before";
-  } else if (request.includes("达到条件") || request.includes("有风险时") || request.includes("出现")) {
+  if (request.includes("达到条件") || request.includes("有风险时") || request.includes("出现")) {
     values.alertTimingMode = "condition-hit";
+  }
+
+  const offsetMatch = request.match(/(\d+)\s*天/);
+  if (offsetMatch && values.alertTimingMode === "days-before") {
+    values.alertOffset = offsetMatch[1];
   }
 
   if (request.includes("每天") || request.includes("每日")) {
@@ -483,14 +482,13 @@ export function getRuleFields(intent: Exclude<RuleIntent, "unsupported">, values
     {
       id: "objectType",
       label: "监控对象",
-      type: "radio",
+      type: "select",
       required: true,
       options:
         intent === "alert"
           ? [
               { label: "集团", value: "group" },
               { label: "账户", value: "account" },
-              { label: "客户", value: "customer" },
             ]
           : [
               { label: "订单号", value: "order" },
@@ -508,7 +506,9 @@ export function getRuleFields(intent: Exclude<RuleIntent, "unsupported">, values
           ? "例如：ORD-240301"
           : values.objectType === "account"
             ? "例如：ACC-31001"
-            : "例如：华星集团 / 客户-陈洁",
+            : intent === "alert"
+              ? "例如：华星集团"
+              : "例如：华星集团 / 客户-陈洁",
       helper: values.objectType ? `可用对象示例：${existingObjects[values.objectType].join("、")}` : "先选择监控对象类型。",
     },
   ];
@@ -519,39 +519,28 @@ export function getRuleFields(intent: Exclude<RuleIntent, "unsupported">, values
       {
         id: "alertType",
         label: "预警类型",
-        type: "radio",
+        type: "select",
         required: true,
         options: [
           { label: "红名单到期", value: "red-list-expiry" },
           { label: "欠费风险", value: "arrears-risk" },
           { label: "长周期套餐到期", value: "plan-expiry" },
-          { label: "其他已支持预警类型", value: "contract-renewal" },
         ],
       },
-      {
-        id: "alertTimingMode",
-        label: "提醒时间",
-        type: "radio",
-        required: true,
-        options: [
-          { label: "到期前N天", value: "days-before" },
-          { label: "到期前N个工作日", value: "workdays-before" },
-          { label: "达到条件时提醒", value: "condition-hit" },
-        ],
-      },
-      {
-        id: "alertFrequency",
-        label: "提醒频率",
-        type: "radio",
-        required: true,
-        options: [
-          { label: "仅提醒一次", value: "once" },
-          { label: "每日提醒", value: "daily" },
-          { label: "每周提醒", value: "weekly" },
-          { label: "持续提醒直到处理", value: "until-handled" },
-        ],
-      },
-      ...notifyChannelFields(values),
+      ...(values.alertType === "arrears-risk"
+        ? []
+        : [
+            {
+              id: "alertOffset",
+              label: "提前提醒天数",
+              type: "number" as const,
+              required: true,
+              min: 1,
+              max: 365,
+              placeholder: "请输入提前几天提醒",
+              helper: "例如填写 3，表示到期前 3 天提醒。",
+            },
+          ]),
       ...effectivePeriodFields(values, "alert"),
     ];
     return fields;
@@ -631,7 +620,6 @@ export function getRuleFields(intent: Exclude<RuleIntent, "unsupported">, values
             ? "集团/客户场景默认建议“每日汇总提醒”。"
             : "可按监控对象选择更合适的提醒频率。",
     },
-    ...notifyChannelFields(values),
     ...effectivePeriodFields(values, "order-monitor"),
   ];
   return orderFields;
@@ -668,22 +656,6 @@ function timingFieldForOrder(values: RuleFormValues): RuleField {
     placeholder: values.monitorTimingMode === "days-timeout" ? "请输入天数" : "请输入小时数",
     helper: "请输入正整数。",
   };
-}
-
-function notifyChannelFields(values: RuleFormValues): RuleField[] {
-  return [
-    {
-      id: "notifyChannels",
-      label: "通知方式",
-      type: "chips",
-      required: true,
-      options: [
-        { label: "通知中心", value: "notification-center" },
-        { label: "消息通知", value: "message" },
-      ],
-      helper: `当前已选：${(values.notifyChannels ?? []).length || 0} 项，可重复点击增减。`,
-    },
-  ];
 }
 
 function effectivePeriodFields(values: RuleFormValues, intent: Exclude<RuleIntent, "unsupported">): RuleField[] {
@@ -789,7 +761,7 @@ export function validateRuleForm(
         type: "rule",
         severity: "error",
         title: "未选择预警类型",
-        detail: "请选择红名单到期、欠费风险、长周期套餐到期或其他已支持预警类型。",
+        detail: "请选择红名单到期、欠费风险或长周期套餐到期。",
       });
     }
 
@@ -802,14 +774,24 @@ export function validateRuleForm(
       });
     }
 
-    if (values.alertFrequency === "daily" && values.alertTimingMode === "condition-hit") {
-      capacityGroup.issues.push({
-        type: "capacity",
-        severity: "warning",
-        title: "建议降级为汇总提醒",
-        detail: "条件命中且每日提醒可能产生高频消息，建议评估是否改为通知中心或每周提醒。",
-      });
+    if (values.alertType !== "arrears-risk") {
+      if (!values.alertOffset?.trim()) {
+        ruleGroup.issues.push({
+          type: "rule",
+          severity: "error",
+          title: "未填写提醒天数",
+          detail: "请填写需要提前多少天提醒。",
+        });
+      } else if (!/^\d+$/.test(values.alertOffset) || Number(values.alertOffset) <= 0 || Number(values.alertOffset) > 365) {
+        ruleGroup.issues.push({
+          type: "rule",
+          severity: "error",
+          title: "提醒天数不合法",
+          detail: "提醒天数需填写 1 到 365 之间的正整数。",
+        });
+      }
     }
+
   }
 
   if (intent === "order-monitor") {
@@ -905,24 +887,6 @@ export function validateRuleForm(
     }
   }
 
-  if (!(values.notifyChannels?.length ?? 0)) {
-    ruleGroup.issues.push({
-      type: "rule",
-      severity: "error",
-      title: "通知方式缺失",
-      detail: "请至少选择一种通知方式。",
-    });
-  }
-
-  if (values.notifyChannels?.includes("message") && values.objectType === "group") {
-    capacityGroup.issues.push({
-      type: "capacity",
-      severity: "warning",
-      title: "消息通知开销较高",
-      detail: "集团级规则通过消息通知可能产生较高触达开销，建议同时保留通知中心。",
-    });
-  }
-
   if (values.effectivePeriod === "time-range") {
     if (!values.effectiveStart || !values.effectiveEnd) {
       ruleGroup.issues.push({
@@ -1016,8 +980,6 @@ export function buildRuleSummary(intent: Exclude<RuleIntent, "unsupported">, val
           { label: "监控对象", value: `${objectTypeLabels[values.objectType as RuleObjectType]} / ${values.objectValue ?? "-"}` },
           { label: "触发条件 / 预警类型", value: alertTypeLabels[values.alertType ?? ""] ?? "-" },
           { label: "提醒时间", value: formatAlertTiming(values) },
-          { label: "提醒频率", value: frequencyLabels[values.alertFrequency ?? ""] ?? "-" },
-          { label: "通知方式", value: formatChannels(values.notifyChannels ?? []) },
           { label: "生效周期", value: formatEffective(values) },
           { label: "执行方式说明", value: executionLabels[executionMode] },
         ]
@@ -1035,7 +997,6 @@ export function buildRuleSummary(intent: Exclude<RuleIntent, "unsupported">, val
           { label: "触发条件 / 预警类型", value: monitorConditionLabels[values.monitorCondition ?? ""] ?? "-" },
           { label: "提醒时间 / 阈值", value: formatMonitorTiming(values) },
           { label: "提醒频率", value: frequencyLabels[values.monitorFrequency ?? ""] ?? "-" },
-          { label: "通知方式", value: formatChannels(values.notifyChannels ?? []) },
           { label: "生效周期", value: formatEffective(values) },
           { label: "执行方式说明", value: executionLabels[executionMode] },
         ];
@@ -1168,7 +1129,7 @@ export const starterRules: ManagedRule[] = [
       alertTimingMode: "days-before",
       alertOffset: "3",
       alertFrequency: "daily",
-      notifyChannels: ["notification-center", "message"],
+      notifyChannels: ["notification-center"],
       effectivePeriod: "long-term",
     },
     "active",
@@ -1204,7 +1165,7 @@ export const starterRules: ManagedRule[] = [
       monitorTimingMode: "status-change",
       monitorThreshold: "状态变化即提醒",
       monitorFrequency: "instant",
-      notifyChannels: ["notification-center", "message"],
+      notifyChannels: ["notification-center"],
       effectivePeriod: "until-complete",
     },
     "active",
@@ -1239,7 +1200,8 @@ export const starterRules: ManagedRule[] = [
       objectType: "account",
       objectValue: "ACC-31001",
       alertType: "plan-expiry",
-      alertTimingMode: "workdays-before",
+      alertTimingMode: "days-before",
+      alertOffset: "7",
       alertFrequency: "weekly",
       notifyChannels: ["notification-center"],
       effectivePeriod: "time-range",
@@ -1262,7 +1224,7 @@ export const starterRules: ManagedRule[] = [
       monitorTimingMode: "status-change",
       monitorThreshold: "状态变化即提醒",
       monitorFrequency: "summary-daily",
-      notifyChannels: ["notification-center", "message"],
+      notifyChannels: ["notification-center"],
       effectivePeriod: "until-complete",
     },
     "error",
@@ -1316,7 +1278,7 @@ export const starterAlerts: RuleAlertRecord[] = [
     reason: "华星集团红名单将在3天后到期。",
     triggeredAt: "2026-04-22 09:40",
     recommendation: "建议联系客户经理确认续期安排，并视情况调整提醒频率。",
-    notificationChannels: ["notification-center", "message"],
+    notificationChannels: ["notification-center"],
     followUpStatus: "tracking",
     riskLevel: "medium",
     handlingStatus: "跟进中",
@@ -1333,7 +1295,7 @@ export const starterAlerts: RuleAlertRecord[] = [
     reason: "订单 ORD-240301 执行失败，已达到即时提醒条件。",
     triggeredAt: "2026-04-22 14:12",
     recommendation: "建议跳转业务排障助手继续处理失败原因。",
-    notificationChannels: ["notification-center", "message"],
+    notificationChannels: ["notification-center"],
     followUpStatus: "new",
     riskLevel: "high",
     handlingStatus: "待处理",
@@ -1391,8 +1353,9 @@ function getPrimaryCondition(intent: Exclude<RuleIntent, "unsupported">, values:
 }
 
 function formatAlertTiming(values: RuleFormValues): string {
-  if (values.alertTimingMode === "days-before") return "到期前提醒";
-  if (values.alertTimingMode === "workdays-before") return "到期前工作日提醒";
+  if (values.alertTimingMode === "days-before") {
+    return `到期前 ${values.alertOffset ?? "N"} 天提醒`;
+  }
   return "达到条件时提醒";
 }
 
@@ -1413,11 +1376,6 @@ function formatMonitorScope(values: RuleFormValues): string {
   }
 
   return monitorScopeLabels[values.monitorScope ?? "all-orders"] ?? "所有订单";
-}
-
-function formatChannels(channels: string[]): string {
-  if (!channels.length) return "-";
-  return channels.map((item) => (item === "message" ? "消息通知" : "通知中心")).join(" + ");
 }
 
 function formatEffective(values: RuleFormValues): string {

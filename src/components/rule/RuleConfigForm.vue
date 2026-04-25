@@ -33,41 +33,28 @@
           @input="setValue(field.id, ($event.target as HTMLTextAreaElement).value)"
         ></textarea>
 
-        <select
-          v-else-if="field.type === 'select'"
-          :value="stringValue(field.id)"
-          class="text-input"
-          @change="setValue(field.id, ($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">请选择</option>
-          <option v-for="option in field.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-
-        <div v-else-if="field.type === 'radio'" class="option-stack">
-          <button
-            v-for="option in field.options"
-            :key="option.value"
-            type="button"
-            class="option-card"
-            :class="{ selected: stringValue(field.id) === option.value }"
-            @click="setValue(field.id, option.value)"
+        <div v-else-if="field.type === 'select' || field.type === 'radio'" class="select-shell">
+          <select
+            :value="stringValue(field.id)"
+            class="select-input"
+            @change="setValue(field.id, ($event.target as HTMLSelectElement).value)"
           >
-            <strong>{{ option.label }}</strong>
-            <small v-if="option.hint">{{ option.hint }}</small>
-          </button>
+            <option value="">请选择</option>
+            <option v-for="option in field.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+          <span class="select-icon" aria-hidden="true">⌄</span>
         </div>
 
-        <div v-else-if="field.type === 'chips'" class="chip-grid">
-          <button
-            v-for="option in field.options"
-            :key="option.value"
-            type="button"
-            class="chip-button"
-            :class="{ selected: arrayValue(field.id).includes(option.value) }"
-            @click="toggleArrayValue(field.id, option.value)"
+        <div v-else-if="field.type === 'chips'" class="select-shell">
+          <select
+            :value="arrayValue(field.id)[0] ?? ''"
+            class="select-input"
+            @change="setArrayValue(field.id, ($event.target as HTMLSelectElement).value)"
           >
-            {{ option.label }}
-          </button>
+            <option value="">请选择</option>
+            <option v-for="option in field.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+          <span class="select-icon" aria-hidden="true">⌄</span>
         </div>
 
         <small v-if="field.helper" class="field-helper">{{ field.helper }}</small>
@@ -141,6 +128,14 @@ function setValue(key: string, value: string) {
     monitorFrequencyTouched = true;
   }
 
+  if (key === "alertType") {
+    if (value === "arrears-risk") {
+      localValues.alertTimingMode = "condition-hit";
+    } else if (!localValues.alertTimingMode || localValues.alertTimingMode === "condition-hit") {
+      localValues.alertTimingMode = "days-before";
+    }
+  }
+
   if (key === "objectType" && props.fields.some((field) => field.id === "monitorFrequency")) {
     if (value === "order") {
       delete localValues.monitorScope;
@@ -169,11 +164,8 @@ function setValue(key: string, value: string) {
   emit("update:values", cloneValues(localValues));
 }
 
-function toggleArrayValue(key: string, value: string) {
-  const current = arrayValue(key);
-  localValues[key as keyof RuleFormValues] = (
-    current.includes(value) ? current.filter((item) => item !== value) : [...current, value]
-  ) as never;
+function setArrayValue(key: string, value: string) {
+  localValues[key as keyof RuleFormValues] = (value ? [value] : []) as never;
   emit("update:values", cloneValues(localValues));
 }
 
@@ -228,6 +220,62 @@ function submit() {
   background: rgba(7, 24, 46, 0.72);
   color: var(--text-main);
   outline: none;
+}
+
+.select-shell {
+  position: relative;
+}
+
+.select-shell::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 15px;
+  background: linear-gradient(180deg, rgba(79, 151, 255, 0.12), rgba(13, 33, 60, 0));
+  pointer-events: none;
+}
+
+.select-input {
+  position: relative;
+  width: 100%;
+  min-height: 50px;
+  padding: 13px 44px 13px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(155, 196, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(18, 51, 98, 0.94), rgba(8, 25, 49, 0.96)),
+    rgba(7, 24, 46, 0.88);
+  color: var(--text-main);
+  outline: none;
+  appearance: none;
+  box-shadow:
+    0 10px 24px rgba(3, 11, 24, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.select-input:focus {
+  border-color: rgba(101, 194, 255, 0.42);
+  box-shadow:
+    0 0 0 3px rgba(75, 170, 255, 0.12),
+    0 10px 24px rgba(3, 11, 24, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.select-icon {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 10px;
+  background: rgba(82, 164, 255, 0.14);
+  color: #9bdcff;
+  font-size: 14px;
+  line-height: 1;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .text-area {

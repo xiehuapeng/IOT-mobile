@@ -39,11 +39,13 @@ const props = withDefaults(
     compact?: boolean;
     variant?: "panel" | "plain";
     typewriter?: boolean;
+    assistantAvatarId?: string;
   }>(),
   {
     compact: false,
     variant: "panel",
     typewriter: false,
+    assistantAvatarId: "rule-config",
   },
 );
 
@@ -52,7 +54,7 @@ const typingMessageId = ref<string | null>(null);
 const typingLength = ref(0);
 let typingTimer = 0;
 
-const assistantAvatarSrc = computed(() => `${import.meta.env.BASE_URL}agent-avatars/rule-config.png`);
+const assistantAvatarSrc = computed(() => `${import.meta.env.BASE_URL}agent-avatars/${props.assistantAvatarId}.png`);
 
 const roleLabelMap = {
   assistant: "助手",

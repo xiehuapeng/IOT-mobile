@@ -28,7 +28,10 @@
           :class="{ active: route.path === item.to }"
           @click="$emit('close')"
         >
-          <span>{{ item.label }}</span>
+          <span>
+            {{ item.label }}
+            <em v-if="item.badge" class="item-badge">{{ item.badge }}</em>
+          </span>
           <small>{{ item.hint }}</small>
         </RouterLink>
       </div>
@@ -60,9 +63,10 @@ import { RouterLink, useRoute } from "vue-router";
 import { featuredAgents } from "../../mock/agents";
 import type { AppUser } from "../../types/agent";
 
-defineProps<{
+const props = defineProps<{
   open: boolean;
   user: AppUser | null;
+  unreadCount?: number;
 }>();
 
 defineEmits<{
@@ -72,11 +76,17 @@ defineEmits<{
 
 const route = useRoute();
 
-const primaryItems = [
+const primaryItems = computed(() => [
   { label: "移动工作台", to: "/app/home", hint: "首页与最近访问" },
   { label: "智能体广场", to: "/app/plaza", hint: "查看全部助手" },
+  {
+    label: "消息中心",
+    to: "/app/message-center",
+    hint: "接收规则提醒与处理动态",
+    badge: props.unreadCount && props.unreadCount > 0 ? props.unreadCount : undefined,
+  },
   { label: "我的规则", to: "/app/my-rules", hint: "查看规则、提醒与历史记录" },
-];
+]);
 
 const avatarText = computed(() => "账号");
 </script>
@@ -203,12 +213,29 @@ const avatarText = computed(() => "账号");
 }
 
 .nav-item span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 15px;
   font-weight: 600;
 }
 
 .nav-item small {
   color: var(--text-secondary);
+}
+
+.item-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #5fc9ff, #2e83ff);
+  color: #eff9ff;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1;
 }
 
 .logout-button {

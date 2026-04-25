@@ -17,22 +17,24 @@
       </button>
     </div>
 
-    <div class="composer-shell">
-      <button class="tool-button" type="button" aria-label="上传图片" @click="$emit('utility-click')">▧</button>
-      <textarea
-        ref="textareaRef"
-        :value="request"
-        rows="1"
-        class="composer-input"
-        :disabled="disabled"
-        placeholder="请输入规则配置诉求"
-        @input="handleInput"
-        @keydown="handleKeydown"
-      ></textarea>
-      <button class="tool-button" type="button" aria-label="语音输入" @click="$emit('utility-click')">🎙</button>
-      <button class="send-button" type="button" :disabled="disabled" @click="$emit('submit-request')">发送</button>
+    <div class="composer-area">
+      <div class="composer-shell">
+        <button class="tool-button" type="button" aria-label="上传图片" @click="$emit('utility-click')">▧</button>
+        <textarea
+          ref="textareaRef"
+          :value="request"
+          rows="1"
+          class="composer-input"
+          :disabled="disabled"
+          placeholder="请输入规则配置诉求"
+          @input="handleInput"
+          @keydown="handleKeydown"
+        ></textarea>
+        <button class="tool-button" type="button" aria-label="语音输入" @click="$emit('utility-click')">🎙</button>
+        <button class="send-button" type="button" :disabled="disabled" @click="$emit('submit-request')">发送</button>
+      </div>
+      <p class="composer-hint">支持上传截图辅助配置</p>
     </div>
-    <p class="composer-hint">支持上传截图辅助配置</p>
   </section>
 </template>
 
@@ -81,12 +83,16 @@ function handleKeydown(event: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
 }
 
 .scenario-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
+  flex: 0 0 auto;
 }
 
 .scenario-card {
@@ -131,6 +137,11 @@ function handleKeydown(event: KeyboardEvent) {
   margin: 10px 0 0;
   color: var(--text-secondary);
   line-height: 1.65;
+}
+
+.composer-area {
+  margin-top: auto;
+  flex: 0 0 auto;
 }
 
 .composer-shell {

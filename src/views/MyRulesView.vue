@@ -22,7 +22,16 @@
       </div>
       <div class="rule-list">
         <article v-for="rule in activeRules" :key="rule.id" class="rule-card">
-          <RuleCardMeta :rule="rule" :selected-rule-id="selectedRuleId ?? undefined" @toggle="toggleHistory" @edit="editRule" @pause="pause" @remove="remove" />
+          <RuleCardMeta
+            :rule="rule"
+            :selected-rule-id="selectedRuleId ?? undefined"
+            @toggle="toggleHistory"
+            @edit="editRule"
+            @pause="pause"
+            @remove="remove"
+            @open-message-center="openMessageCenter"
+            @open-agent="openAgentForRule"
+          />
         </article>
       </div>
     </section>
@@ -36,7 +45,14 @@
       </div>
       <div class="rule-list compact-list">
         <article v-for="rule in pendingRules" :key="rule.id" class="rule-card compact-card">
-          <RuleCardMeta :rule="rule" :selected-rule-id="selectedRuleId ?? undefined" @toggle="toggleHistory" @edit="editRule" />
+          <RuleCardMeta
+            :rule="rule"
+            :selected-rule-id="selectedRuleId ?? undefined"
+            @toggle="toggleHistory"
+            @edit="editRule"
+            @open-message-center="openMessageCenter"
+            @open-agent="openAgentForRule"
+          />
         </article>
       </div>
     </section>
@@ -50,7 +66,14 @@
       </div>
       <div class="rule-list compact-list">
         <article v-for="rule in pausedRules" :key="rule.id" class="rule-card compact-card">
-          <RuleCardMeta :rule="rule" :selected-rule-id="selectedRuleId ?? undefined" @toggle="toggleHistory" @edit="editRule" />
+          <RuleCardMeta
+            :rule="rule"
+            :selected-rule-id="selectedRuleId ?? undefined"
+            @toggle="toggleHistory"
+            @edit="editRule"
+            @open-message-center="openMessageCenter"
+            @open-agent="openAgentForRule"
+          />
           <div class="action-grid single-row">
             <button class="accent-button small-action" type="button" @click="resume(rule.id)">恢复执行</button>
             <button class="ghost-button small-action" type="button" @click="terminate(rule.id)">终止规则</button>
@@ -68,7 +91,14 @@
       </div>
       <div class="rule-list compact-list">
         <article v-for="rule in errorRules" :key="rule.id" class="rule-card compact-card error-card">
-          <RuleCardMeta :rule="rule" :selected-rule-id="selectedRuleId ?? undefined" @toggle="toggleHistory" @edit="editRule" />
+          <RuleCardMeta
+            :rule="rule"
+            :selected-rule-id="selectedRuleId ?? undefined"
+            @toggle="toggleHistory"
+            @edit="editRule"
+            @open-message-center="openMessageCenter"
+            @open-agent="openAgentForRule"
+          />
           <div class="failure-box" v-if="rule.latestFailureReason">{{ rule.latestFailureReason }}</div>
           <div class="action-grid single-row">
             <button class="accent-button small-action" type="button" @click="resume(rule.id)">重新绑定</button>
@@ -87,7 +117,14 @@
       </div>
       <div class="rule-list compact-list">
         <article v-for="rule in completedRules" :key="rule.id" class="rule-card compact-card">
-          <RuleCardMeta :rule="rule" :selected-rule-id="selectedRuleId ?? undefined" @toggle="toggleHistory" @edit="editRule" />
+          <RuleCardMeta
+            :rule="rule"
+            :selected-rule-id="selectedRuleId ?? undefined"
+            @toggle="toggleHistory"
+            @edit="editRule"
+            @open-message-center="openMessageCenter"
+            @open-agent="openAgentForRule"
+          />
         </article>
       </div>
     </section>
@@ -101,7 +138,14 @@
       </div>
       <div class="rule-list compact-list">
         <article v-for="rule in expiredRules" :key="rule.id" class="rule-card compact-card">
-          <RuleCardMeta :rule="rule" :selected-rule-id="selectedRuleId ?? undefined" @toggle="toggleHistory" @edit="editRule" />
+          <RuleCardMeta
+            :rule="rule"
+            :selected-rule-id="selectedRuleId ?? undefined"
+            @toggle="toggleHistory"
+            @edit="editRule"
+            @open-message-center="openMessageCenter"
+            @open-agent="openAgentForRule"
+          />
         </article>
       </div>
     </section>
@@ -115,7 +159,14 @@
       </div>
       <div class="rule-list compact-list">
         <article v-for="rule in terminatedRules" :key="rule.id" class="rule-card compact-card">
-          <RuleCardMeta :rule="rule" :selected-rule-id="selectedRuleId ?? undefined" @toggle="toggleHistory" @edit="editRule" />
+          <RuleCardMeta
+            :rule="rule"
+            :selected-rule-id="selectedRuleId ?? undefined"
+            @toggle="toggleHistory"
+            @edit="editRule"
+            @open-message-center="openMessageCenter"
+            @open-agent="openAgentForRule"
+          />
         </article>
       </div>
     </section>
@@ -173,6 +224,14 @@ function editRule(ruleId: string) {
   router.push({ path: "/app/agents/rule-config", query: { ruleId } });
 }
 
+function openMessageCenter(ruleId: string) {
+  router.push({ path: "/app/message-center", query: { ruleId } });
+}
+
+function openAgentForRule(rule: ManagedRule) {
+  router.push(rule.intent === "order-monitor" ? "/app/agents/troubleshoot" : "/app/agents/rule-config");
+}
+
 function toggleHistory(ruleId: string) {
   selectedRuleId.value = selectedRuleId.value === ruleId ? null : ruleId;
   router.replace({ path: "/app/my-rules", query: selectedRuleId.value ? { ruleId } : {} });
@@ -222,7 +281,7 @@ const RuleCardMeta = defineComponent({
       default: null,
     },
   },
-  emits: ["toggle", "edit", "pause", "remove"],
+  emits: ["toggle", "edit", "pause", "remove", "open-message-center", "open-agent"],
   setup(props, { emit }) {
     function conditionLabel(rule: ManagedRule) {
       if (rule.intent === "alert") {
@@ -283,6 +342,19 @@ const RuleCardMeta = defineComponent({
                     ]),
                   )
                 : [h("p", { class: "empty-text" }, "当前规则暂无触发记录。")]),
+              h("div", { class: "action-grid detail-actions" }, [
+                h("button", { class: "ghost-button small-action", type: "button", onClick: () => emit("edit", props.rule.id) }, "继续编辑"),
+                h(
+                  "button",
+                  { class: "ghost-button small-action", type: "button", onClick: () => emit("open-message-center", props.rule.id) },
+                  "查看消息",
+                ),
+                h(
+                  "button",
+                  { class: "accent-button small-action", type: "button", onClick: () => emit("open-agent", props.rule) },
+                  props.rule.intent === "order-monitor" ? "进入排障助手" : "进入规则助手",
+                ),
+              ]),
             ])
           : null,
       ]);
@@ -371,6 +443,10 @@ const RuleCardMeta = defineComponent({
 
 .single-row {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+:deep(.detail-actions) {
+  margin-top: 12px;
 }
 
 .small-action {

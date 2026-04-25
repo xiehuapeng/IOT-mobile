@@ -283,7 +283,7 @@ const messages = ref<ConversationMessage[]>([]);
 const editingRuleId = ref<string | null>(null);
 const progressState = ref<ProgressState | null>(null);
 const objectResolution = ref<RuleObjectResolution | null>(null);
-const sidebarVisible = ref(true);
+const sidebarVisible = ref(false);
 const toastVisible = ref(false);
 let toastTimer = 0;
 
@@ -382,6 +382,7 @@ function normalizeResolvedValues(values: RuleFormValues, resolution: RuleObjectR
   if (!resolution.matched) return values;
   return {
     ...values,
+    notifyChannels: values.notifyChannels?.length ? values.notifyChannels : ["notification-center"],
     objectType: resolution.matched.objectType,
     objectValue: resolution.matched.value,
   };
@@ -430,13 +431,14 @@ function startQuickEntry(entry: RuleEntryMode) {
   createdRule.value = null;
   formValues.value = {
     naturalRequest: "",
+    notifyChannels: ["notification-center"],
     ...(entry === "quick-order" ? { monitorFrequency: "summary-daily" as const } : {}),
   };
   pushMessage("user", entry === "quick-alert" ? "我想配置预警提醒" : "我想配置订单执行监控");
   pushMessage(
     "assistant",
     entry === "quick-alert"
-      ? "好的，我先替你打开预警提醒配置卡。你可以继续补充自然语言，也可以直接在卡片里填写。"
+      ? "好的，我已替您打开预警提醒配置卡"
       : "好的，我先替你打开订单执行监控配置卡。你可以继续补充自然语言，也可以直接在卡片里填写。",
     "success",
   );
@@ -722,6 +724,8 @@ onBeforeUnmount(() => {
   grid-template-columns: 104px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
+  height: 100%;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -731,7 +735,8 @@ onBeforeUnmount(() => {
 
 .sidebar,
 .chat-panel {
-  min-height: calc(100vh - 220px);
+  height: 100%;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -739,7 +744,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: calc(100vh - 170px);
+  max-height: 100%;
   padding: 9px;
   overflow: hidden;
 }
@@ -856,6 +861,8 @@ onBeforeUnmount(() => {
 }
 
 .chat-panel {
+  display: flex;
+  flex-direction: column;
   padding: 12px;
   overflow: hidden;
 }
@@ -864,7 +871,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
+  min-height: 0;
   min-width: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .progress-panel,
@@ -939,6 +951,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
 }
 
 .assistant-card-head {

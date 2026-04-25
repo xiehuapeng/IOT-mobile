@@ -1,14 +1,46 @@
 <template>
-  <div class="page">
-    <section class="summary section-card conversation-card">
-      <div class="section-heading">
+  <div class="page troubleshoot-layout" :class="{ 'sidebar-hidden': !sidebarVisible }">
+    <aside v-if="sidebarVisible" class="section-card sidebar">
+      <div class="sidebar-head">
         <div>
+          <div class="page-kicker">History</div>
           <h3>对话记录</h3>
-          <p>点击任意消息可快速复制内容。</p>
         </div>
+        <button class="sidebar-toggle" type="button" aria-label="隐藏侧边栏" @click="sidebarVisible = false">‹</button>
       </div>
+
+      <div class="history-list">
+        <button
+          v-for="message in sidebarMessages"
+          :key="message.id"
+          type="button"
+          class="history-item"
+          :class="{ active: message.id === latestMessageId }"
+          @click="copyHistoryMessage(message.content)"
+        >
+          <div class="history-content">
+            <div class="history-topline">
+              <span>{{ roleLabel(message.role) }}</span>
+              <small>{{ message.timestamp }}</small>
+            </div>
+            <strong>{{ shorten(message.content) }}</strong>
+          </div>
+        </button>
+      </div>
+
+      <button class="sidebar-link reset-sidebar" type="button" @click="resetFlow">
+        <span>重新对话</span>
+        <small>清空当前流程并回到排障入口</small>
+      </button>
+    </aside>
+    <button v-else class="sidebar-rail" type="button" aria-label="显示侧边栏" @click="sidebarVisible = true">
+      记录
+    </button>
+
+    <div class="troubleshoot-main">
+    <section class="summary section-card conversation-card">
       <div ref="conversationScrollRef" class="conversation-scroll">
-        <ConversationThread :messages="messages" compact variant="plain" />
+        <ConversationThread :messages="messages" compact variant="plain" typewriter assistant-avatar-id="troubleshoot" />
         <div v-if="quickActions.length" class="assistant-action-strip">
           <span>{{ quickActionTitle }}</span>
           <div class="chip-grid entry-actions">
@@ -95,6 +127,7 @@
       <small class="composer-hint">支持上传截图辅助排障</small>
       <input ref="imageInputRef" class="hidden-file-input" type="file" accept="image/*" @change="handleImageUpload" />
     </section>
+    </div>
   </div>
 </template>
 
@@ -176,9 +209,12 @@ const conversationScrollRef = ref<HTMLElement | null>(null);
 const uploadedImageName = ref("");
 const voiceHolding = ref(false);
 const timers: number[] = [];
+const sidebarVisible = ref(false);
 
 const showComposer = computed(() => !["diagnosing", "executing", "finished", "realname-completion"].includes(phase.value));
 const showRealnameCompletion = computed(() => phase.value === "realname-completion");
+const sidebarMessages = computed(() => [...messages.value].reverse());
+const latestMessageId = computed(() => messages.value.at(-1)?.id ?? "");
 const accountManagerName = computed(() => {
   const name = appState.user?.name?.trim() || "当前账号";
   return /经理|客户经理/.test(name) ? name : `${name}客户经理`;
@@ -238,6 +274,24 @@ function pushMessage(role: ConversationMessage["role"], content: string, tone?: 
     tone,
   });
   scrollConversationToBottom();
+}
+
+function roleLabel(role: ConversationMessage["role"]) {
+  if (role === "assistant") return "助手";
+  if (role === "user") return "你";
+  return "系统";
+}
+
+function shorten(content: string) {
+  return content.length > 18 ? `${content.slice(0, 18)}...` : content;
+}
+
+async function copyHistoryMessage(content: string) {
+  try {
+    await navigator.clipboard.writeText(content);
+  } catch {
+    // no-op
+  }
 }
 
 function scrollConversationToBottom() {
@@ -688,6 +742,153 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
+.troubleshoot-layout {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: start;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.troubleshoot-layout.sidebar-hidden {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
+.troubleshoot-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.sidebar,
+.conversation-card {
+  min-width: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100vh - 170px);
+  padding: 9px;
+  overflow: hidden;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.sidebar-head h3 {
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+
+.sidebar-toggle,
+.sidebar-rail {
+  border: 1px solid rgba(153, 192, 255, 0.16);
+  background: rgba(10, 31, 59, 0.72);
+  color: var(--text-main);
+}
+
+.sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  border-radius: 12px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.sidebar-rail {
+  position: sticky;
+  top: 0;
+  width: 34px;
+  min-height: 132px;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  writing-mode: vertical-rl;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+}
+
+.history-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 9px;
+  border-radius: 14px;
+  border: 1px solid rgba(141, 188, 255, 0.1);
+  background: rgba(7, 25, 49, 0.72);
+  color: var(--text-main);
+  text-align: left;
+  min-width: 0;
+}
+
+.history-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.history-topline {
+  display: block;
+}
+
+.history-topline span,
+.history-topline small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.history-item strong {
+  display: -webkit-box;
+  margin-top: 5px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.4;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+.history-item.active {
+  border-color: rgba(99, 191, 255, 0.34);
+  background: rgba(16, 51, 97, 0.68);
+}
+
+.sidebar-link {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(153, 192, 255, 0.16);
+  background: rgba(10, 31, 59, 0.58);
+  color: var(--text-main);
+  text-align: left;
+}
+
+.sidebar-link span {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sidebar-link small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .conversation-card {
   display: flex;
   flex: 1 1 0;
@@ -701,10 +902,9 @@ onBeforeUnmount(() => {
 
 .conversation-scroll {
   flex: 1 1 auto;
-  min-height: 360px;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 2px;
-  margin-top: 16px;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -759,8 +959,7 @@ onBeforeUnmount(() => {
 }
 
 .chat-composer {
-  position: sticky;
-  bottom: 0;
+  position: relative;
   z-index: 5;
   flex: 0 0 auto;
   padding: 10px;
