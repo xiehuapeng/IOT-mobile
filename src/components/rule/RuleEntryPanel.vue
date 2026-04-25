@@ -1,10 +1,5 @@
 <template>
   <section class="entry-panel">
-    <div class="assistant-note">
-      <span class="note-tag">快捷场景</span>
-      <p>我可以直接带你进入对应配置，你也可以继续在下方输入自然语言。</p>
-    </div>
-
     <div class="scenario-grid">
       <button
         v-for="item in entries"
@@ -23,17 +18,21 @@
     </div>
 
     <div class="composer-shell">
+      <button class="tool-button" type="button" aria-label="上传图片" @click="$emit('utility-click')">▧</button>
       <textarea
         ref="textareaRef"
         :value="request"
         rows="1"
         class="composer-input"
         :disabled="disabled"
-        placeholder="直接输入你的诉求，按 Enter 发送，Shift + Enter 换行"
+        placeholder="请输入规则配置诉求"
         @input="handleInput"
         @keydown="handleKeydown"
       ></textarea>
+      <button class="tool-button" type="button" aria-label="语音输入" @click="$emit('utility-click')">🎙</button>
+      <button class="send-button" type="button" :disabled="disabled" @click="$emit('submit-request')">发送</button>
     </div>
+    <p class="composer-hint">支持上传截图辅助配置</p>
   </section>
 </template>
 
@@ -52,6 +51,7 @@ const emit = defineEmits<{
   "update:request": [value: string];
   "quick-entry": [entry: RuleEntryMode];
   "submit-request": [];
+  "utility-click": [];
 }>();
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
@@ -60,7 +60,7 @@ function resizeTextarea() {
   const node = textareaRef.value;
   if (!node) return;
   node.style.height = "auto";
-  node.style.height = `${Math.min(node.scrollHeight, 140)}px`;
+  node.style.height = `${Math.min(node.scrollHeight, 96)}px`;
 }
 
 function handleInput(event: Event) {
@@ -80,43 +80,18 @@ function handleKeydown(event: KeyboardEvent) {
 .entry-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.assistant-note,
-.composer-shell {
-  padding: 14px 16px;
-  border-radius: 20px;
-  border: 1px solid rgba(153, 192, 255, 0.14);
-  background: rgba(9, 31, 61, 0.44);
-}
-
-.note-tag {
-  display: inline-flex;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(92, 201, 255, 0.12);
-  color: #8bdcff;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.assistant-note p {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-  line-height: 1.7;
+  gap: 12px;
 }
 
 .scenario-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 .scenario-card {
-  padding: 16px;
-  border-radius: 22px;
+  padding: 14px;
+  border-radius: 20px;
   border: 1px solid rgba(125, 188, 255, 0.18);
   background:
     linear-gradient(180deg, rgba(16, 46, 90, 0.96), rgba(7, 23, 46, 0.92)),
@@ -153,25 +128,60 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 .scenario-card p {
-  margin: 12px 0 0;
+  margin: 10px 0 0;
   color: var(--text-secondary);
-  line-height: 1.7;
+  line-height: 1.65;
 }
 
 .composer-shell {
-  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px 62px;
+  gap: 8px;
+  align-items: end;
+  padding: 10px;
+  border-radius: 22px;
+  border: 1px solid rgba(153, 192, 255, 0.18);
+  background: rgba(9, 31, 61, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.tool-button,
+.send-button {
+  min-height: 44px;
+  border-radius: 16px;
+  font-weight: 800;
+}
+
+.tool-button {
+  border: 1px solid rgba(142, 187, 255, 0.2);
+  background: rgba(10, 32, 63, 0.58);
+  color: #e9f5ff;
+  font-size: 20px;
+}
+
+.send-button {
+  border: 0;
+  background: linear-gradient(135deg, #78dcff 0%, #3b8fff 100%);
+  color: #fff;
+  font-size: 16px;
+}
+
+.send-button:disabled {
+  opacity: 0.58;
 }
 
 .composer-input {
   width: 100%;
-  min-height: 28px;
-  max-height: 140px;
+  min-height: 44px;
+  max-height: 96px;
+  padding: 10px 2px;
   border: 0;
   outline: none;
   resize: none;
   background: transparent;
   color: var(--text-main);
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .composer-input:disabled {
@@ -180,7 +190,19 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 .composer-input::placeholder {
-  color: var(--text-muted);
+  color: rgba(220, 232, 247, 0.5);
 }
 
+.composer-hint {
+  margin: -6px 0 0 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 380px) {
+  .composer-shell {
+    grid-template-columns: 40px minmax(0, 1fr) 40px 56px;
+    gap: 6px;
+  }
+}
 </style>

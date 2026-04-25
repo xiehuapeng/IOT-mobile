@@ -1,9 +1,9 @@
 <template>
   <DeviceFrame>
-    <div class="shell">
+    <div class="shell" :class="{ 'is-portal-home': isPortalHome }">
       <AppDrawer :open="appState.drawerOpen" :user="appState.user" @close="closeDrawer" @logout="handleLogout" />
 
-      <header class="app-bar">
+      <header v-if="!isPortalHome" class="app-bar">
         <button class="icon-button" type="button" @click="toggleDrawer">菜单</button>
         <div class="bar-title">
           <div class="page-kicker">Workspace</div>
@@ -22,16 +22,16 @@
 
       <footer class="bottom-dock">
         <button class="dock-item" type="button" :class="{ active: route.path === '/app/home' }" @click="router.push('/app/home')">
-          <span>首页</span>
-          <small>工作台</small>
+          <span class="dock-icon">⌂</span>
+          <small>首页</small>
         </button>
         <button class="dock-item" type="button" :class="{ active: route.path === '/app/plaza' }" @click="router.push('/app/plaza')">
-          <span>广场</span>
-          <small>助手入口</small>
+          <span class="dock-icon">▦</span>
+          <small>广场</small>
         </button>
-        <button class="dock-item" type="button" @click="openRecentAgent">
-          <span>最近</span>
-          <small>{{ recentShortcutLabel }}</small>
+        <button class="dock-item" type="button" @click="router.push('/app/my-rules')">
+          <span class="dock-icon">♙</span>
+          <small>我的</small>
         </button>
       </footer>
     </div>
@@ -44,15 +44,15 @@ import { RouterView, useRoute, useRouter } from "vue-router";
 
 import AppDrawer from "../components/shell/AppDrawer.vue";
 import DeviceFrame from "../components/shell/DeviceFrame.vue";
-import { appState, closeDrawer, logoutDemo, recentAgents, toggleDrawer } from "../stores/appState";
+import { appState, closeDrawer, logoutDemo, toggleDrawer } from "../stores/appState";
 
 const route = useRoute();
 const router = useRouter();
 
 const routeTitle = computed(() => String(route.meta.title ?? "智能体广场"));
+const isPortalHome = computed(() => route.path === "/app/home");
 const onPlaza = computed(() => route.path === "/app/plaza");
 const headerActionLabel = computed(() => (onPlaza.value ? "首页" : "广场"));
-const recentShortcutLabel = computed(() => recentAgents.value[0]?.shortName ?? "排障");
 
 function handleHeaderAction() {
   router.push(onPlaza.value ? "/app/home" : "/app/plaza");
@@ -61,10 +61,6 @@ function handleHeaderAction() {
 function handleLogout() {
   logoutDemo();
   router.push("/login");
-}
-
-function openRecentAgent() {
-  router.push(recentAgents.value[0]?.route ?? "/app/agents/troubleshoot");
 }
 
 watch(
@@ -116,6 +112,15 @@ watch(
   padding: 0 16px 12px;
 }
 
+.is-portal-home {
+  height: calc(100% - 38px);
+  background: #f5f7fb;
+}
+
+.is-portal-home .shell-body {
+  padding: 0;
+}
+
 .bottom-dock {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -136,6 +141,13 @@ watch(
   color: var(--text-main);
 }
 
+.dock-icon {
+  display: block;
+  height: 24px;
+  font-size: 24px;
+  line-height: 1;
+}
+
 .dock-item small {
   color: var(--text-secondary);
 }
@@ -143,6 +155,32 @@ watch(
 .dock-item.active {
   border-color: rgba(103, 189, 255, 0.34);
   background: rgba(19, 63, 122, 0.64);
+}
+
+.is-portal-home .bottom-dock {
+  gap: 0;
+  padding: 8px 10px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid #edf0f5;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -8px 18px rgba(20, 44, 80, 0.05);
+}
+
+.is-portal-home .dock-item {
+  min-height: 54px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #596372;
+}
+
+.is-portal-home .dock-item small {
+  color: inherit;
+  font-size: 14px;
+}
+
+.is-portal-home .dock-item.active {
+  color: #168fe8;
+  background: transparent;
 }
 
 .page-slide-enter-active,
