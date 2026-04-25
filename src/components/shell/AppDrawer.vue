@@ -10,48 +10,50 @@
         <button class="close-button" type="button" @click="$emit('close')">关闭</button>
       </div>
 
-      <div class="profile-card">
-        <div class="profile-avatar">{{ avatarText }}</div>
-        <div>
-          <strong>{{ user?.name ?? "当前账号" }}</strong>
-          <p>{{ user?.organization ?? "省级运营中心" }}</p>
+      <div class="drawer-content">
+        <div class="profile-card">
+          <div class="profile-avatar">{{ avatarText }}</div>
+          <div>
+            <strong>{{ user?.name ?? "当前账号" }}</strong>
+            <p>{{ user?.organization ?? "省级运营中心" }}</p>
+          </div>
         </div>
-      </div>
 
-      <div class="nav-group">
-        <div class="group-title">主导航</div>
-        <RouterLink
-          v-for="item in primaryItems"
-          :key="item.to"
-          :to="item.to"
-          class="nav-item"
-          :class="{ active: route.path === item.to }"
-          @click="$emit('close')"
-        >
-          <span>
-            {{ item.label }}
-            <em v-if="item.badge" class="item-badge">{{ item.badge }}</em>
-          </span>
-          <small>{{ item.hint }}</small>
-        </RouterLink>
-      </div>
+        <div class="nav-group">
+          <div class="group-title">主导航</div>
+          <RouterLink
+            v-for="item in primaryItems"
+            :key="item.to"
+            :to="item.to"
+            class="nav-item"
+            :class="{ active: route.path === item.to }"
+            @click="$emit('close')"
+          >
+            <span>
+              {{ item.label }}
+              <em v-if="item.badge" class="item-badge">{{ item.badge }}</em>
+            </span>
+            <small>{{ item.hint }}</small>
+          </RouterLink>
+        </div>
 
-      <div class="nav-group">
-        <div class="group-title">常用助手</div>
-        <RouterLink
-          v-for="agent in featuredAgents"
-          :key="agent.id"
-          :to="agent.route"
-          class="nav-item"
-          :class="{ active: route.path === agent.route }"
-          @click="$emit('close')"
-        >
-          <span>{{ agent.name }}</span>
-          <small>{{ agent.shortName }} / {{ agent.category }}</small>
-        </RouterLink>
-      </div>
+        <div class="nav-group">
+          <div class="group-title">常用助手</div>
+          <RouterLink
+            v-for="agent in featuredAgents"
+            :key="agent.id"
+            :to="agent.route"
+            class="nav-item"
+            :class="{ active: route.path === agent.route }"
+            @click="$emit('close')"
+          >
+            <span>{{ agent.name }}</span>
+            <small>{{ agent.shortName }} / {{ agent.category }}</small>
+          </RouterLink>
+        </div>
 
-      <button class="logout-button" type="button" @click="$emit('logout')">退出当前账号</button>
+        <button class="logout-button" type="button" @click="$emit('logout')">退出当前账号</button>
+      </div>
     </aside>
   </div>
 </template>
@@ -121,10 +123,13 @@ const avatarText = computed(() => "账号");
   top: 14px;
   left: 14px;
   bottom: 14px;
+  display: flex;
+  flex-direction: column;
   width: min(290px, calc(100% - 28px));
   padding: 18px;
   transform: translateX(-108%);
   transition: transform 0.28s ease;
+  overflow: hidden;
 }
 
 .drawer-shell.open .drawer {
@@ -136,10 +141,21 @@ const avatarText = computed(() => "账号");
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .drawer-head h3 {
   margin: 4px 0 0;
+}
+
+.drawer-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .close-button,

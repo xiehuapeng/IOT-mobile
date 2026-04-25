@@ -90,11 +90,8 @@
     </section>
 
     <section v-if="showComposer" class="summary section-card chat-composer">
-      <div v-if="uploadedImageName" class="composer-attachment">
-        已选择图片：{{ uploadedImageName }}
-      </div>
       <div class="composer-row">
-        <button class="ghost-button media-button" type="button" title="上传图片" aria-label="上传图片" @click="triggerImageUpload">
+        <button class="ghost-button media-button" type="button" title="上传图片" aria-label="上传图片" @click="showBuildingToast">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M5 19h14V5H5v14Zm2-2 3.2-4 2.3 2.8 3-3.8L18 17H7Zm2.5-6.8a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z" />
           </svg>
@@ -108,35 +105,34 @@
         <button
           class="ghost-button voice-button"
           type="button"
-          :class="{ active: voiceHolding }"
-          @mousedown="startVoiceHold"
-          @mouseup="endVoiceHold"
-          @mouseleave="endVoiceHold"
-          @touchstart.prevent="startVoiceHold"
-          @touchend.prevent="endVoiceHold"
+          @click="showBuildingToast"
           title="按住说话"
           aria-label="按住说话"
         >
-          <svg v-if="!voiceHolding" viewBox="0 0 24 24" aria-hidden="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z" />
           </svg>
-          <span v-else>...</span>
         </button>
         <button class="accent-button send-button" type="button" @click="sendText">发送</button>
       </div>
       <small class="composer-hint">支持上传截图辅助排障</small>
-      <input ref="imageInputRef" class="hidden-file-input" type="file" accept="image/*" @change="handleImageUpload" />
     </section>
+    <transition name="toast-fade">
+      <div v-if="toastVisible" class="build-toast">当前功能还在建设中哦~</div>
+    </transition>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 
 import ConversationThread from "../../components/agent/ConversationThread.vue";
 import { appState, markAgentVisited } from "../../stores/appState";
 import type { ConversationMessage, TroubleshootingEntryId } from "../../types/agent";
+
+const route = useRoute();
 
 type Phase =
   | "entry"
@@ -204,12 +200,11 @@ const intake = ref<IntakeState>({
 const progressTask = ref<ProgressTask | null>(null);
 const progressPercent = ref(0);
 const realnameForm = ref({ name: "", idNo: "" });
-const imageInputRef = ref<HTMLInputElement | null>(null);
 const conversationScrollRef = ref<HTMLElement | null>(null);
-const uploadedImageName = ref("");
-const voiceHolding = ref(false);
 const timers: number[] = [];
 const sidebarVisible = ref(false);
+const toastVisible = ref(false);
+let toastTimer = 0;
 
 const showComposer = computed(() => !["diagnosing", "executing", "finished", "realname-completion"].includes(phase.value));
 const showRealnameCompletion = computed(() => phase.value === "realname-completion");
@@ -325,43 +320,43 @@ function resetFlow() {
   progressTask.value = null;
   progressPercent.value = 0;
   realnameForm.value = { name: "", idNo: "" };
-  uploadedImageName.value = "";
-  voiceHolding.value = false;
   messages.value = [];
   pushMessage("assistant", `你好，${accountManagerName.value}，我是您的排障小助手，请问我有什么可以帮助您？`);
+}
+
+async function startOrderFlowFromAlert(orderNo: string) {
+  clearTimers();
+  draft.value = "";
+  intake.value = {
+    entryId: "order",
+    userKey: orderNo,
+    issue: "订单异常处理",
+    originalText: `订单号：${orderNo}，来自消息提醒的订单异常处理`,
+    latestResult: "",
+  };
+  progressTask.value = null;
+  progressPercent.value = 0;
+  realnameForm.value = { name: "", idNo: "" };
+  messages.value = [];
+  phase.value = "confirming";
+  pushMessage("assistant", `已收到订单监控提醒，正在为订单 ${orderNo} 发起异常处理流程。`);
+  pushMessage("system", `已自动带入订单号 ${orderNo}，开始诊断执行状态与异常原因。`, "info");
+  await nextTick();
+  await startTroubleshooting();
+}
+
+function showBuildingToast() {
+  toastVisible.value = true;
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    toastVisible.value = false;
+  }, 1600);
 }
 
 function handleComposerKeydown(event: KeyboardEvent) {
   if (event.key !== "Enter" || event.shiftKey) return;
   event.preventDefault();
   sendText();
-}
-
-function triggerImageUpload() {
-  imageInputRef.value?.click();
-}
-
-function handleImageUpload(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  uploadedImageName.value = file.name;
-  pushMessage("system", `已上传图片：${file.name}，Demo 将作为排障补充材料。`, "info");
-  confirmSupplementReceived("图片");
-}
-
-function startVoiceHold() {
-  voiceHolding.value = true;
-}
-
-function endVoiceHold() {
-  if (!voiceHolding.value) return;
-  voiceHolding.value = false;
-  confirmSupplementReceived("语音");
-}
-
-function confirmSupplementReceived(type: "图片" | "语音") {
-  if (phase.value !== "confirming") return;
-  pushMessage("assistant", `我已收到${type}，是否开始排障？`);
 }
 
 function sendText() {
@@ -707,7 +702,7 @@ function buildManualSummary() {
     `异常用户：${intake.value.userKey || "未识别"}`,
     `异常问题：${intake.value.issue || "用户反馈未解决"}`,
     `原始描述：${intake.value.originalText || "无"}`,
-    uploadedImageName.value ? `补充材料：已上传图片 ${uploadedImageName.value}` : "补充材料：无",
+    "补充材料：无",
     intake.value.latestResult ? `当前处理结果：${intake.value.latestResult}` : "当前处理结果：自动排障后仍需人工跟进",
   ].join("\n");
 }
@@ -723,6 +718,13 @@ function enterManualChat() {
 onMounted(() => {
   markAgentVisited("troubleshoot");
   resetFlow();
+  const autoSources = new Set(["message-center", "my-rules"]);
+  const fromAutoSource = typeof route.query.source === "string" && autoSources.has(route.query.source);
+  const autoEntry = route.query.entry === "order";
+  const orderNo = typeof route.query.orderNo === "string" ? route.query.orderNo.trim() : "";
+  if (fromAutoSource && autoEntry && orderNo) {
+    void startOrderFlowFromAlert(orderNo);
+  }
 });
 
 watch(
@@ -730,8 +732,23 @@ watch(
   () => scrollConversationToBottom(),
 );
 
+watch(
+  () => [route.query.source, route.query.entry, route.query.orderNo].join("|"),
+  (value, oldValue) => {
+    if (value === oldValue) return;
+    const autoSources = new Set(["message-center", "my-rules"]);
+    const fromAutoSource = typeof route.query.source === "string" && autoSources.has(route.query.source);
+    const autoEntry = route.query.entry === "order";
+    const orderNo = typeof route.query.orderNo === "string" ? route.query.orderNo.trim() : "";
+    if (fromAutoSource && autoEntry && orderNo) {
+      void startOrderFlowFromAlert(orderNo);
+    }
+  },
+);
+
 onBeforeUnmount(() => {
   clearTimers();
+  window.clearTimeout(toastTimer);
 });
 </script>
 
@@ -1069,5 +1086,36 @@ onBeforeUnmount(() => {
 .reset-button {
   width: 100%;
   padding: 14px 16px;
+}
+
+.build-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 110px;
+  transform: translateX(-50%);
+  z-index: 8;
+  min-width: 184px;
+  max-width: calc(100% - 48px);
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: rgba(7, 18, 36, 0.92);
+  border: 1px solid rgba(141, 193, 255, 0.2);
+  color: #eef7ff;
+  text-align: center;
+  font-size: 13px;
+  box-shadow: 0 16px 28px rgba(0, 8, 20, 0.28);
+}
+
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px);
 }
 </style>

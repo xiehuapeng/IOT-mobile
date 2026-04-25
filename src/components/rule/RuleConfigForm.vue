@@ -24,6 +24,18 @@
           @input="setValue(field.id, ($event.target as HTMLInputElement).value)"
         />
 
+        <div
+          v-else-if="field.type === 'textarea' && field.id === 'monitorThreshold'"
+          class="static-area"
+        >
+          <ul class="static-list">
+            <li>执行完成</li>
+            <li>执行失败</li>
+            <li>卡单或长时间未完成</li>
+            <li>批量订单成功失败数量及失败原因</li>
+          </ul>
+        </div>
+
         <textarea
           v-else-if="field.type === 'textarea'"
           :value="stringValue(field.id)"
@@ -281,6 +293,29 @@ function submit() {
 .text-area {
   resize: vertical;
   min-height: 104px;
+}
+
+.static-area {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(155, 196, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(14, 40, 77, 0.9), rgba(7, 24, 46, 0.9)),
+    rgba(7, 24, 46, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 24px rgba(3, 11, 24, 0.14);
+}
+
+.static-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-main);
+  line-height: 1.7;
+}
+
+.static-list li + li {
+  margin-top: 4px;
 }
 
 .option-stack {

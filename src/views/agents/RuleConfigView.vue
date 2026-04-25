@@ -296,7 +296,7 @@ const configTitle = computed(() => (currentIntent.value === "alert" ? "预警提
 const configDescription = computed(() =>
   currentIntent.value === "alert"
     ? "我已经先替你识别了规则类型、对象和提醒方式，下面把剩余参数补齐就能进入摘要确认。"
-    : "我已经先替你识别了监控对象、范围和监控条件，下面继续补齐监控参数。",
+    : "我已经先替你识别了监控对象和订单号。系统会默认监控执行完成、执行失败、卡单或长时间未完成以及批量订单结果，并通过 APP 内消息持续提醒至订单结束。",
 );
 const sidebarMessages = computed(() => [...messages.value].reverse());
 const latestMessageId = computed(() => messages.value.at(-1)?.id ?? "");
@@ -432,16 +432,14 @@ function startQuickEntry(entry: RuleEntryMode) {
   formValues.value = {
     naturalRequest: "",
     notifyChannels: ["notification-center"],
-    ...(entry === "quick-order" ? { monitorFrequency: "summary-daily" as const } : {}),
+    ...(entry === "quick-order"
+      ? {
+          effectivePeriod: "until-complete" as const,
+          monitorCondition: "status-change" as const,
+          monitorThreshold: "执行完成、执行失败、卡单或长时间未完成，批量订单成功失败数量及失败原因",
+        }
+      : {}),
   };
-  pushMessage("user", entry === "quick-alert" ? "我想配置预警提醒" : "我想配置订单执行监控");
-  pushMessage(
-    "assistant",
-    entry === "quick-alert"
-      ? "好的，我已替您打开预警提醒配置卡"
-      : "好的，我先替你打开订单执行监控配置卡。你可以继续补充自然语言，也可以直接在卡片里填写。",
-    "success",
-  );
 }
 
 async function continueWithValues(values: RuleFormValues, source: "natural" | "manual") {
@@ -550,26 +548,6 @@ function simulateCreateOutcome(rule: ManagedRule) {
     rule.statusHistory.push({
       status: "create-failed",
       timestamp: "2026-04-24 11:32",
-      note: rule.latestFailureReason,
-    });
-  }
-
-  if (rule.values.monitorCondition === "timeout" && rule.values.monitorFrequency === "instant") {
-    rule.latestFailureReason = "执行安全检查未通过：大范围对象不建议即时提醒，系统已阻断生产绑定。";
-    rule.status = "create-failed";
-    rule.statusHistory.push({
-      status: "create-failed",
-      timestamp: "2026-04-24 11:32",
-      note: rule.latestFailureReason,
-    });
-  }
-
-  if (rule.values.objectType === "group" && rule.values.monitorCondition === "timeout") {
-    rule.latestFailureReason = "任务绑定失败：集团级超时监控需转入异步扫描任务，当前生产通道尚未开放自动绑定。";
-    rule.status = "create-failed";
-    rule.statusHistory.push({
-      status: "create-failed",
-      timestamp: "2026-04-24 11:33",
       note: rule.latestFailureReason,
     });
   }

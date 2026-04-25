@@ -51,11 +51,23 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 
-import { markAlertStatus, ruleCenter, unreadAlertCount } from "../stores/ruleCenter";
+import { getRuleById, markAlertStatus, ruleCenter, unreadAlertCount } from "../stores/ruleCenter";
 import type { RuleAlertRecord } from "../types/agent";
 
 const router = useRouter();
 const alerts = computed(() => ruleCenter.alerts);
+
+function resolveOrderNo(alert: RuleAlertRecord) {
+  const relatedRule = getRuleById(alert.ruleId);
+  const ruleOrder = relatedRule?.values.monitorSpecificOrder?.trim();
+  if (ruleOrder) return ruleOrder;
+
+  const objectValue = relatedRule?.objectValue?.trim() || alert.objectValue?.trim() || "";
+  if (/^ORD-[A-Z0-9-]+$/i.test(objectValue)) return objectValue;
+
+  const sourceText = [alert.reason, alert.ruleName, alert.recommendation].filter(Boolean).join(" ");
+  return sourceText.match(/ORD-[A-Z0-9-]+/i)?.[0] ?? "";
+}
 
 function statusText(status: RuleAlertRecord["followUpStatus"]) {
   if (status === "resolved") return "已处理";
@@ -81,6 +93,19 @@ function markResolved(alertId: string) {
 
 function openAlert(alert: RuleAlertRecord) {
   markAlertStatus(alert.id, "tracking");
+  if (alert.suggestedAgentId === "troubleshoot") {
+    const orderNo = resolveOrderNo(alert);
+    router.push({
+      path: alert.suggestedRoute ?? "/app/agents/troubleshoot",
+      query: {
+        source: "message-center",
+        entry: "order",
+        alertId: alert.id,
+        orderNo: orderNo ?? "",
+      },
+    });
+    return;
+  }
   router.push(alert.suggestedRoute ?? "/app/my-rules");
 }
 </script>

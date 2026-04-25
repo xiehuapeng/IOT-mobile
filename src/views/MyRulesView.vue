@@ -228,8 +228,31 @@ function openMessageCenter(ruleId: string) {
   router.push({ path: "/app/message-center", query: { ruleId } });
 }
 
+function resolveRuleOrderNo(rule: ManagedRule) {
+  const explicitOrderNo = rule.values.monitorSpecificOrder?.trim();
+  if (explicitOrderNo) return explicitOrderNo;
+
+  const objectValue = rule.objectValue?.trim() ?? "";
+  if (/^ORD-[A-Z0-9-]+$/i.test(objectValue)) return objectValue;
+
+  const orderInName = rule.name.match(/ORD-[A-Z0-9-]+/i)?.[0];
+  return orderInName ?? "";
+}
+
 function openAgentForRule(rule: ManagedRule) {
-  router.push(rule.intent === "order-monitor" ? "/app/agents/troubleshoot" : "/app/agents/rule-config");
+  if (rule.intent === "order-monitor") {
+    router.push({
+      path: "/app/agents/troubleshoot",
+      query: {
+        source: "my-rules",
+        entry: "order",
+        ruleId: rule.id,
+        orderNo: resolveRuleOrderNo(rule),
+      },
+    });
+    return;
+  }
+  router.push("/app/agents/rule-config");
 }
 
 function toggleHistory(ruleId: string) {
@@ -287,7 +310,7 @@ const RuleCardMeta = defineComponent({
       if (rule.intent === "alert") {
         return alertTypeLabels[rule.primaryCondition] ?? rule.primaryCondition;
       }
-      return monitorConditionLabels[rule.primaryCondition] ?? rule.primaryCondition;
+      return monitorConditionLabels[rule.primaryCondition] ?? "订单执行状态监控";
     }
 
     return () =>

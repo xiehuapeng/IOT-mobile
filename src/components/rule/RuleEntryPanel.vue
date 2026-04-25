@@ -19,21 +19,28 @@
 
     <div class="composer-area">
       <div class="composer-shell">
-        <button class="tool-button" type="button" aria-label="上传图片" @click="$emit('utility-click')">▧</button>
+        <button class="tool-button" type="button" aria-label="上传图片" @click="$emit('utility-click')">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 19h14V5H5v14Zm2-2 3.2-4 2.3 2.8 3-3.8L18 17H7Zm2.5-6.8a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z" />
+          </svg>
+        </button>
         <textarea
           ref="textareaRef"
           :value="request"
           rows="1"
           class="composer-input"
           :disabled="disabled"
-          placeholder="请输入规则配置诉求"
+          placeholder="请输入规则配置诉求，按 Enter 发送"
           @input="handleInput"
           @keydown="handleKeydown"
         ></textarea>
-        <button class="tool-button" type="button" aria-label="语音输入" @click="$emit('utility-click')">🎙</button>
+        <button class="tool-button" type="button" aria-label="语音输入" @click="$emit('utility-click')">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z" />
+          </svg>
+        </button>
         <button class="send-button" type="button" :disabled="disabled" @click="$emit('submit-request')">发送</button>
       </div>
-      <p class="composer-hint">支持上传截图辅助配置</p>
     </div>
   </section>
 </template>
@@ -167,7 +174,16 @@ function handleKeydown(event: KeyboardEvent) {
   border: 1px solid rgba(142, 187, 255, 0.2);
   background: rgba(10, 32, 63, 0.58);
   color: #e9f5ff;
-  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.tool-button svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
 }
 
 .send-button {
@@ -202,12 +218,6 @@ function handleKeydown(event: KeyboardEvent) {
 
 .composer-input::placeholder {
   color: rgba(220, 232, 247, 0.5);
-}
-
-.composer-hint {
-  margin: -6px 0 0 4px;
-  color: var(--text-muted);
-  font-size: 12px;
 }
 
 @media (max-width: 380px) {
