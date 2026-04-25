@@ -204,6 +204,13 @@ const mergedError = computed(() => props.errorMessage || localError.value);
   min-height: 104px;
 }
 
+.text-input::placeholder,
+.text-area::placeholder {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .option-stack {
   display: flex;
   flex-direction: column;

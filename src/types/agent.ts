@@ -201,6 +201,44 @@ export interface RuleSummaryItem {
   value: string;
 }
 
+export type TroubleshootingEntryId = "communication" | "order" | "realname";
+export type TroubleshootingActionId =
+  | "continue"
+  | "execute"
+  | "handoff"
+  | "finish"
+  | "continue-wait"
+  | "realname-reauth"
+  | "complete-realname-info";
+
+export interface TroubleshootingIntake {
+  entryId: TroubleshootingEntryId;
+  originalQuestion: string;
+  sourceScene: string;
+  serviceNo?: string;
+  iccid?: string;
+  imsi?: string;
+  orderNo?: string;
+  batchTaskNo?: string;
+  errorText?: string;
+}
+
+export interface TroubleshootingRecognition {
+  inScope: boolean;
+  entryId: TroubleshootingEntryId;
+  entryLabel: string;
+  missingFields: string[];
+  extracted: TroubleshootingIntake;
+  outOfScopeMessage?: string;
+  followupSuggestion?: string;
+  redirectAgents?: string[];
+}
+
+export interface TroubleshootingDetail {
+  label: string;
+  value: string;
+}
+
 export interface RuleSummary {
   title: string;
   description: string;
@@ -250,6 +288,43 @@ export interface RuleAlertRecord {
   secondaryReminderHint?: string;
   suggestedAgentId?: AgentId;
   suggestedRoute?: string;
+}
+
+export interface TroubleshootingExecutableAction {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface TroubleshootingResult {
+  faultType: string;
+  checkedItems: string[];
+  conclusion: string;
+  details: TroubleshootingDetail[];
+  suggestedActions: string[];
+  status: FlowStatus;
+  reference: string;
+  executableActions: TroubleshootingExecutableAction[];
+  unresolvedPoint?: string;
+}
+
+export interface TroubleshootingExecutionTrace {
+  operator: string;
+  operatedAt: string;
+  target: string;
+  action: string;
+  result: string;
+  contextRef: string;
+}
+
+export interface TroubleshootingHandoffSummary {
+  originalQuestion: string;
+  objectInfo: string[];
+  checkedItems: string[];
+  keyResults: string[];
+  conclusion: string;
+  suggestedActions: string[];
+  unresolvedPoint: string;
 }
 
 export function isAgentId(value: string): value is AgentId {
