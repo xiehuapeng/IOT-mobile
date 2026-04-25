@@ -78,7 +78,7 @@
 
     <div class="action-row">
       <button v-if="showBack" class="ghost-button action-button" type="button" @click="$emit('back')">返回上一步</button>
-      <button class="accent-button action-button" type="button" @click="submit">确认并校验</button>
+      <button class="accent-button action-button" type="button" @click="submit">{{ submitLabel ?? "生成摘要" }}</button>
     </div>
   </section>
 </template>
@@ -95,6 +95,7 @@ const props = defineProps<{
   values: RuleFormValues;
   errorMessage?: string;
   showBack?: boolean;
+  submitLabel?: string;
 }>();
 
 const emit = defineEmits<{

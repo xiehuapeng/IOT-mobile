@@ -10,13 +10,14 @@ import type {
   RuleNotificationChannel,
   RuleObjectType,
   RuleQuickEntry,
+  RuleRiskLevel,
   RuleSummary,
   RuleValidationGroup,
   RuleValidationResult,
 } from "../types/agent";
 
 const existingObjects: Record<RuleObjectType, string[]> = {
-  group: ["华星集团", "云数科技集团", "远海物流集团"],
+  group: ["华星集团", "华星集团北区", "华星集团政企分部", "云数科技集团", "远海物流集团"],
   account: ["ACC-31001", "ACC-44018", "ACC-88903"],
   customer: ["客户-陈洁", "客户-智造工厂A", "客户-南区连锁门店"],
   order: ["ORD-240301", "ORD-240778", "ORD-241122"],
@@ -110,6 +111,20 @@ export const executionLabels: Record<RuleExecutionMode, string> = {
   "summary-check": "汇总检查",
 };
 
+export const ruleStatusLabels = {
+  draft: "草稿",
+  "pending-confirmation": "待确认",
+  creating: "创建中",
+  "create-failed": "创建失败",
+  pending: "待生效",
+  active: "启用中",
+  paused: "暂停中",
+  error: "执行异常",
+  completed: "已完成",
+  expired: "已失效",
+  terminated: "已终止",
+} as const;
+
 type SupportedRuleIntent = Exclude<RuleIntent, "unsupported">;
 
 interface ParsedObjectMatch {
@@ -125,6 +140,18 @@ export interface NaturalRuleDraftResult {
   summary: RuleSummary | null;
 }
 
+export interface RuleObjectCandidate {
+  objectType: RuleObjectType;
+  value: string;
+}
+
+export interface RuleObjectResolution {
+  status: "empty" | "not-found" | "multiple" | "forbidden" | "resolved";
+  candidates: RuleObjectCandidate[];
+  matched?: RuleObjectCandidate;
+  message: string;
+}
+
 function detectObjectMatch(request: string, intent: SupportedRuleIntent): ParsedObjectMatch {
   const text = request.trim();
 
@@ -136,6 +163,11 @@ function detectObjectMatch(request: string, intent: SupportedRuleIntent): Parsed
     if (matched) {
       return { objectType, objectValue: matched };
     }
+  }
+
+  const demoObject = detectDemoObjectAlias(text, intent);
+  if (demoObject.objectType || demoObject.objectValue) {
+    return demoObject;
   }
 
   if (intent === "alert") {
@@ -151,6 +183,82 @@ function detectObjectMatch(request: string, intent: SupportedRuleIntent): Parsed
   }
 
   return {};
+}
+
+function detectDemoObjectAlias(text: string, intent: SupportedRuleIntent): ParsedObjectMatch {
+  if (intent !== "alert" && intent !== "order-monitor") return {};
+
+  if (text.includes("不存在集团")) return { objectType: "group", objectValue: "不存在集团" };
+  if (text.includes("受限集团")) return { objectType: "group", objectValue: "云数科技集团" };
+  if (text.includes("华星")) return { objectType: "group", objectValue: "华星" };
+
+  return {};
+}
+
+function searchableObjectTypes(intent: SupportedRuleIntent, objectType?: RuleObjectType) {
+  if (objectType) return [objectType];
+  return intent === "alert" ? (["group", "account", "customer"] as RuleObjectType[]) : (["order", "group", "customer"] as RuleObjectType[]);
+}
+
+export function resolveRuleObject(
+  intent: SupportedRuleIntent,
+  values: RuleFormValues,
+): RuleObjectResolution {
+  const keyword = values.objectValue?.trim();
+  if (!keyword) {
+    return {
+      status: "empty",
+      candidates: [],
+      message: "请先输入监控对象名称、编号或订单号，我再帮你继续匹配。",
+    };
+  }
+
+  const searchableTypes = searchableObjectTypes(intent, values.objectType);
+  const exactCandidates = searchableTypes.flatMap((objectType) =>
+    existingObjects[objectType]
+      .filter((candidate) => candidate === keyword)
+      .map((value) => ({ objectType, value })),
+  );
+  const candidates = exactCandidates.length
+    ? exactCandidates
+    : searchableTypes.flatMap((objectType) =>
+        existingObjects[objectType]
+          .filter((candidate) => candidate.includes(keyword) || keyword.includes(candidate))
+          .map((value) => ({ objectType, value })),
+      );
+
+  if (!candidates.length) {
+    return {
+      status: "not-found",
+      candidates: [],
+      message: `没有找到与“${keyword}”匹配的监控对象，请重新输入或换一个对象试试。`,
+    };
+  }
+
+  if (candidates.length > 1) {
+    return {
+      status: "multiple",
+      candidates,
+      message: `我找到 ${candidates.length} 个可能的对象，请你确认要监控的是哪一个。`,
+    };
+  }
+
+  const matched = candidates[0];
+  if (permissionBlocked.has(matched.value)) {
+    return {
+      status: "forbidden",
+      candidates,
+      matched,
+      message: `当前账号暂时没有权限监控“${matched.value}”，你可以换一个对象继续创建。`,
+    };
+  }
+
+  return {
+    status: "resolved",
+    candidates,
+    matched,
+    message: `已匹配到监控对象“${matched.value}”，我会按这个对象继续为你生成规则。`,
+  };
 }
 
 function inferNotifyChannels(request: string): RuleNotificationChannel[] {
@@ -968,6 +1076,8 @@ export function createManagedRule(
   createdBy: string,
 ): ManagedRule {
   const summary = buildRuleSummary(intent, values);
+  const nextStatus =
+    values.effectivePeriod === "time-range" && values.effectiveStart && values.effectiveStart > "2026-04-23" ? "pending" : "active";
   return {
     id: `RULE-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
     name: values.ruleName ?? "未命名规则",
@@ -981,11 +1091,22 @@ export function createManagedRule(
     effectiveLabel: formatEffective(values),
     executionMode: summary.executionMode,
     executionLabel: summary.executionLabel,
-    status: values.effectivePeriod === "time-range" && values.effectiveStart && values.effectiveStart > "2026-04-23" ? "pending" : "active",
+    status: nextStatus,
     createdAt: "2026-04-23 09:36",
     createdBy,
     values: { ...values },
     summary,
+    bindingLabel: summary.executionLabel,
+    statusHistory: [
+      { status: "draft", timestamp: "2026-04-23 09:34", note: "已生成规则草稿。" },
+      { status: "pending-confirmation", timestamp: "2026-04-23 09:35", note: "规则摘要已确认，准备创建。" },
+      { status: "creating", timestamp: "2026-04-23 09:36", note: "正在绑定执行策略并写入规则中心。" },
+      {
+        status: nextStatus,
+        timestamp: "2026-04-23 09:36",
+        note: nextStatus === "pending" ? "规则将在生效周期开始后自动启用。" : "规则创建成功，已进入启用状态。",
+      },
+    ],
   };
 }
 
@@ -1004,6 +1125,9 @@ export function buildAlertPreview(rule: ManagedRule): RuleAlertRecord[] {
         recommendation: "查看详情并确认是否需要继续跟踪或调整规则。",
         notificationChannels: rule.notifyChannels,
         followUpStatus: "new",
+        riskLevel: resolveRiskLevel(rule),
+        handlingStatus: "待处理",
+        secondaryReminderHint: resolveSecondaryReminder(rule),
         suggestedRoute: "/app/my-rules",
       },
     ];
@@ -1022,6 +1146,9 @@ export function buildAlertPreview(rule: ManagedRule): RuleAlertRecord[] {
       recommendation: "如涉及失败、超时未完成或卡单，可跳转业务排障助手继续处理。",
       notificationChannels: rule.notifyChannels,
       followUpStatus: "new",
+      riskLevel: resolveRiskLevel(rule),
+      handlingStatus: "待处理",
+      secondaryReminderHint: resolveSecondaryReminder(rule),
       suggestedAgentId: "troubleshoot",
       suggestedRoute: "/app/agents/troubleshoot",
     },
@@ -1103,6 +1230,79 @@ export const starterRules: ManagedRule[] = [
     "expired",
     "2026-04-10 11:35",
   ),
+  createStarterRule(
+    "RULE-AL1003",
+    "ACC-31001套餐到期提醒",
+    "alert",
+    {
+      ruleName: "ACC-31001套餐到期提醒",
+      objectType: "account",
+      objectValue: "ACC-31001",
+      alertType: "plan-expiry",
+      alertTimingMode: "workdays-before",
+      alertFrequency: "weekly",
+      notifyChannels: ["notification-center"],
+      effectivePeriod: "time-range",
+      effectiveStart: "2026-04-28",
+      effectiveEnd: "2026-05-28",
+    },
+    "pending",
+    "2026-04-24 09:15",
+  ),
+  createStarterRule(
+    "RULE-OM2003",
+    "客户-陈洁订单执行异常排查",
+    "order-monitor",
+    {
+      ruleName: "客户-陈洁订单执行异常排查",
+      objectType: "customer",
+      objectValue: "客户-陈洁",
+      monitorScope: "all-orders",
+      monitorCondition: "failed",
+      monitorTimingMode: "status-change",
+      monitorThreshold: "状态变化即提醒",
+      monitorFrequency: "summary-daily",
+      notifyChannels: ["notification-center", "message"],
+      effectivePeriod: "until-complete",
+    },
+    "error",
+    "2026-04-19 12:10",
+  ),
+  createStarterRule(
+    "RULE-OM2004",
+    "ORD-240778状态变更跟踪",
+    "order-monitor",
+    {
+      ruleName: "ORD-240778状态变更跟踪",
+      objectType: "order",
+      objectValue: "ORD-240778",
+      monitorCondition: "status-change",
+      monitorTimingMode: "status-change",
+      monitorThreshold: "状态变化即提醒",
+      monitorFrequency: "instant",
+      notifyChannels: ["notification-center"],
+      effectivePeriod: "one-time",
+    },
+    "completed",
+    "2026-04-14 18:20",
+  ),
+  createStarterRule(
+    "RULE-AL1004",
+    "云数科技集团续期提醒",
+    "alert",
+    {
+      ruleName: "云数科技集团续期提醒",
+      objectType: "group",
+      objectValue: "华星集团",
+      alertType: "contract-renewal",
+      alertTimingMode: "days-before",
+      alertFrequency: "once",
+      notifyChannels: ["notification-center"],
+      effectivePeriod: "long-term",
+    },
+    "terminated",
+    "2026-04-08 15:40",
+  ),
 ];
 
 export const starterAlerts: RuleAlertRecord[] = [
@@ -1118,6 +1318,9 @@ export const starterAlerts: RuleAlertRecord[] = [
     recommendation: "建议联系客户经理确认续期安排，并视情况调整提醒频率。",
     notificationChannels: ["notification-center", "message"],
     followUpStatus: "tracking",
+    riskLevel: "medium",
+    handlingStatus: "跟进中",
+    secondaryReminderHint: "若到期前仍未处理，系统会继续提醒。",
     suggestedRoute: "/app/my-rules",
   },
   {
@@ -1132,6 +1335,9 @@ export const starterAlerts: RuleAlertRecord[] = [
     recommendation: "建议跳转业务排障助手继续处理失败原因。",
     notificationChannels: ["notification-center", "message"],
     followUpStatus: "new",
+    riskLevel: "high",
+    handlingStatus: "待处理",
+    secondaryReminderHint: "高风险事件会优先展示，并追加二次提醒。",
     suggestedAgentId: "troubleshoot",
     suggestedRoute: "/app/agents/troubleshoot",
   },
@@ -1164,6 +1370,19 @@ function createStarterRule(
     createdBy: "业务体验官",
     values,
     summary,
+    bindingLabel: summary.executionLabel,
+    latestFailureReason:
+      status === "error"
+        ? "最近一次扫描任务执行失败，系统已暂停自动提醒，等待重新绑定。"
+        : status === "create-failed"
+          ? "规则创建失败，当前配置已保留，可重新提交或保存为草稿。"
+          : undefined,
+    statusHistory: [
+      { status: "draft", timestamp: createdAt, note: "规则草稿已生成。" },
+      { status: "pending-confirmation", timestamp: createdAt, note: "规则已确认待创建。" },
+      { status: "creating", timestamp: createdAt, note: "规则已提交执行绑定。" },
+      { status, timestamp: createdAt, note: `规则当前状态为${ruleStatusLabels[status]}。` },
+    ],
   };
 }
 
@@ -1206,6 +1425,24 @@ function formatEffective(values: RuleFormValues): string {
     return `${effectiveLabels[values.effectivePeriod]} (${values.effectiveStart} 至 ${values.effectiveEnd})`;
   }
   return effectiveLabels[values.effectivePeriod ?? ""] ?? "-";
+}
+
+function resolveRiskLevel(rule: ManagedRule): RuleRiskLevel {
+  if (rule.intent === "alert") {
+    return rule.values.alertType === "arrears-risk" ? "high" : rule.values.alertType === "red-list-expiry" ? "medium" : "low";
+  }
+
+  if (rule.values.monitorCondition === "failed") return "high";
+  if (rule.values.monitorCondition === "timeout") {
+    return Number(rule.values.monitorThreshold ?? "0") >= 48 ? "high" : "medium";
+  }
+  return "medium";
+}
+
+function resolveSecondaryReminder(rule: ManagedRule) {
+  const riskLevel = resolveRiskLevel(rule);
+  if (riskLevel !== "high") return undefined;
+  return "高风险事件会优先展示，必要时会追加二次提醒。";
 }
 
 function buildAlertHitReason(rule: ManagedRule): string {

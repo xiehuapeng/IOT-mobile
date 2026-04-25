@@ -3,12 +3,12 @@
     <div class="section-heading">
       <div>
         <h3>提醒记录</h3>
-        <p>可查看触发原因、时间和建议动作，并继续执行后续处理。</p>
+        <p>可查看命中原因、风险等级、处理状态，并继续执行后续治理动作。</p>
       </div>
       <button class="ghost-inline" type="button" @click="$emit('manage')">规则中心</button>
     </div>
 
-    <article v-for="alert in alerts" :key="alert.id" class="alert-card">
+    <article v-for="alert in alerts" :key="alert.id" class="alert-card" :class="alert.riskLevel">
       <div class="alert-head">
         <div>
           <strong>{{ alert.ruleName }}</strong>
@@ -20,14 +20,19 @@
       <div class="alert-body">
         <div><span>触发原因</span><strong>{{ alert.reason }}</strong></div>
         <div><span>触发时间</span><strong>{{ alert.triggeredAt }}</strong></div>
+        <div><span>风险等级</span><strong>{{ riskLabel(alert.riskLevel) }}</strong></div>
+        <div><span>处理状态</span><strong>{{ alert.handlingStatus }}</strong></div>
         <div><span>建议动作</span><strong>{{ alert.recommendation }}</strong></div>
         <div><span>通知方式</span><strong>{{ channelText(alert.notificationChannels) }}</strong></div>
+        <div v-if="alert.secondaryReminderHint"><span>提醒治理</span><strong>{{ alert.secondaryReminderHint }}</strong></div>
       </div>
 
       <div class="action-grid">
         <button class="accent-button small-action" type="button" @click="$emit('jump', alert)">去排障</button>
         <button class="ghost-button small-action" type="button" @click="$emit('view-detail', alert.ruleId)">查看详情</button>
         <button class="ghost-button small-action" type="button" @click="$emit('edit', alert.ruleId)">调整规则</button>
+        <button class="ghost-button small-action" type="button" @click="$emit('snooze', alert.id)">暂不提醒</button>
+        <button class="ghost-button small-action" type="button" @click="$emit('resolve', alert.id)">标记已处理</button>
         <button class="ghost-button small-action danger-action" type="button" @click="$emit('stop', alert.ruleId)">终止规则</button>
       </div>
     </article>
@@ -46,11 +51,17 @@ defineEmits<{
   "view-detail": [ruleId: string];
   edit: [ruleId: string];
   stop: [ruleId: string];
+  snooze: [alertId: string];
+  resolve: [alertId: string];
   jump: [alert: RuleAlertRecord];
 }>();
 
 function channelText(channels: RuleAlertRecord["notificationChannels"]) {
   return channels.map((item) => (item === "message" ? "消息通知" : "通知中心")).join(" + ");
+}
+
+function riskLabel(riskLevel: RuleAlertRecord["riskLevel"]) {
+  return riskLevel === "high" ? "高风险" : riskLevel === "medium" ? "中风险" : "低风险";
 }
 </script>
 
@@ -80,6 +91,14 @@ function channelText(channels: RuleAlertRecord["notificationChannels"]) {
   border-radius: 20px;
   border: 1px solid rgba(153, 192, 255, 0.14);
   background: rgba(9, 31, 61, 0.52);
+}
+
+.alert-card.high {
+  border-color: rgba(255, 114, 90, 0.32);
+}
+
+.alert-card.medium {
+  border-color: rgba(255, 189, 87, 0.28);
 }
 
 .alert-head {
