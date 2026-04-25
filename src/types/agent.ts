@@ -197,8 +197,19 @@ export interface RuleValidationResult {
 }
 
 export interface RuleSummaryItem {
+  label: string;
+  value: string;
+}
+
 export type TroubleshootingEntryId = "communication" | "order" | "realname";
-export type TroubleshootingActionId = "continue" | "execute" | "handoff" | "finish";
+export type TroubleshootingActionId =
+  | "continue"
+  | "execute"
+  | "handoff"
+  | "finish"
+  | "continue-wait"
+  | "realname-reauth"
+  | "complete-realname-info";
 
 export interface TroubleshootingIntake {
   entryId: TroubleshootingEntryId;
@@ -218,6 +229,8 @@ export interface TroubleshootingRecognition {
   entryLabel: string;
   missingFields: string[];
   extracted: TroubleshootingIntake;
+  outOfScopeMessage?: string;
+  followupSuggestion?: string;
   redirectAgents?: string[];
 }
 
