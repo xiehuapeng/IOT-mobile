@@ -459,7 +459,7 @@ function selectEntry(entryId: TroubleshootingEntryId) {
     return;
   }
   if (entryId === "order") {
-    pushMessage("assistant", "小助手已准备就绪，请您提供订单号即可开始排障。");
+    pushMessage("assistant", "小助手已准备就绪，请您提供20位数字订单号即可开始排障。");
     return;
   }
   pushMessage("assistant", "小助手已准备就绪，请您提供下您的手机号以及出现的问题。");
@@ -488,7 +488,7 @@ function collectProblem(text: string) {
 
 function missingMessage(entryId: TroubleshootingEntryId) {
   if (entryId === "communication") return "我需要您提供手机号或者ICCID。";
-  if (entryId === "order") return "我需要您提供订单号。";
+  if (entryId === "order") return "订单号格式不正确，请确认后重新输入20位数字订单号。";
   return "我需要您提供手机号，并描述具体实名异常问题。";
 }
 
@@ -501,7 +501,7 @@ function displayPhone(fallback: string) {
 }
 
 function extractOrderNo(text: string) {
-  return text.match(/(?:订单号|订单|工单号|单号)[:：]?\s*([A-Z0-9]{6,})/i)?.[1] ?? text.match(/[A-Z]{1,3}\d{6,}|\d{8,}[A-Z]?/i)?.[0] ?? "";
+  return text.match(/(?:订单号|订单|工单号|单号)[:：]?\s*(\d{20})(?!\d)/)?.[1] ?? text.match(/(?:^|\D)(\d{20})(?!\d)/)?.[1] ?? "";
 }
 
 function displayOrderNo(fallback: string) {
@@ -615,7 +615,7 @@ async function runCommunicationFlow() {
 }
 
 async function runOrderFlow() {
-  const orderNo = displayOrderNo("MO202604230001");
+  const orderNo = displayOrderNo("20260423000100000001");
 
   await runProgress("智能诊断统一入口", "正在调用智能诊断统一入口，请稍候。", 5000);
   await pushMessage(
