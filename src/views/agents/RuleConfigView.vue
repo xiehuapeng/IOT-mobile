@@ -299,7 +299,7 @@ const configDescription = computed(() =>
     : "我已经先替你识别了监控对象和订单号。系统会默认监控执行完成、执行失败、卡单或长时间未完成以及批量订单结果，并通过 APP 内消息持续提醒至订单结束。",
 );
 const sidebarMessages = computed(() => [...messages.value].reverse());
-const latestMessageId = computed(() => messages.value.at(-1)?.id ?? "");
+const latestMessageId = computed(() => messages.value[messages.value.length - 1]?.id ?? "");
 const isProgressStage = computed(() => stage.value === "processing" || stage.value === "validation-processing" || stage.value === "creation-processing");
 
 function cloneRuleFormValues(source: RuleFormValues): RuleFormValues {

@@ -213,7 +213,7 @@ let toastTimer = 0;
 const showComposer = computed(() => !["diagnosing", "executing", "finished", "realname-completion"].includes(phase.value));
 const showRealnameCompletion = computed(() => phase.value === "realname-completion");
 const sidebarMessages = computed(() => [...messages.value].reverse());
-const latestMessageId = computed(() => messages.value.at(-1)?.id ?? "");
+const latestMessageId = computed(() => messages.value[messages.value.length - 1]?.id ?? "");
 const accountManagerName = computed(() => {
   const name = appState.user?.name?.trim() || "当前账号";
   return /经理|客户经理/.test(name) ? name : `${name}客户经理`;
