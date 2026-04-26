@@ -459,7 +459,7 @@ function selectEntry(entryId: TroubleshootingEntryId) {
     return;
   }
   if (entryId === "order") {
-    pushMessage("assistant", "小助手已准备就绪，请您提供下您的手机号或者订单号以及出现的问题。");
+    pushMessage("assistant", "小助手已准备就绪，请您提供订单号即可开始排障。");
     return;
   }
   pushMessage("assistant", "小助手已准备就绪，请您提供下您的手机号以及出现的问题。");
@@ -479,15 +479,16 @@ function collectProblem(text: string) {
   intake.value.originalText = text;
   intake.value.issue = summarizeIssue(text, entryId);
   phase.value = "confirming";
+  const subjectLabel = entryId === "order" ? "异常订单" : "异常用户";
   pushMessage(
     "assistant",
-    `小助手已收到您的问题，异常用户：${intake.value.userKey}，异常问题：${intake.value.issue}，您还有什么需要补充，比如异常界面截图等等。`,
+    `小助手已收到您的问题，${subjectLabel}：${intake.value.userKey}，异常问题：${intake.value.issue}，您还有什么需要补充，比如异常界面截图等等。`,
   );
 }
 
 function missingMessage(entryId: TroubleshootingEntryId) {
   if (entryId === "communication") return "我需要您提供手机号或者ICCID。";
-  if (entryId === "order") return "我需要您提供手机号或订单号，并描述具体订单异常问题。";
+  if (entryId === "order") return "我需要您提供订单号。";
   return "我需要您提供手机号，并描述具体实名异常问题。";
 }
 
@@ -499,14 +500,21 @@ function displayPhone(fallback: string) {
   return extractPhoneNumber(intake.value.originalText) || extractPhoneNumber(intake.value.userKey) || fallback;
 }
 
+function extractOrderNo(text: string) {
+  return text.match(/(?:订单号|订单|工单号|单号)[:：]?\s*([A-Z0-9]{6,})/i)?.[1] ?? text.match(/[A-Z]{1,3}\d{6,}|\d{8,}[A-Z]?/i)?.[0] ?? "";
+}
+
+function displayOrderNo(fallback: string) {
+  return extractOrderNo(intake.value.userKey) || extractOrderNo(intake.value.originalText) || fallback;
+}
+
 function extractUserKey(text: string, entryId: TroubleshootingEntryId) {
   const phone = extractPhoneNumber(text);
   const iccid = text.match(/89\d{10,20}/)?.[0];
-  const demoPhone = text.match(/(?:手机号|号码|用户|联系电话)[:：]?\s*([A-Z0-9]{6,})/i)?.[1];
-  const orderNo = text.match(/(?:订单号|订单|工单号|单号)[:：]?\s*([A-Z0-9]{6,})/i)?.[1] ?? text.match(/[A-Z]{1,3}\d{6,}|\d{8,}[A-Z]?/i)?.[0];
+  const orderNo = extractOrderNo(text);
 
   if (entryId === "communication") return phone ?? iccid ?? "";
-  if (entryId === "order") return phone ?? orderNo ?? demoPhone ?? "";
+  if (entryId === "order") return orderNo || "";
   return phone ?? "";
 }
 
@@ -607,10 +615,12 @@ async function runCommunicationFlow() {
 }
 
 async function runOrderFlow() {
+  const orderNo = displayOrderNo("MO202604230001");
+
   await runProgress("智能诊断统一入口", "正在调用智能诊断统一入口，请稍候。", 5000);
   await pushMessage(
     "assistant",
-    [`用户：${displayPhone("13900139001")}`, "订单来源：CMIOT 订单", "订单：MO202604230001"].join("\n"),
+    ["订单来源：CMIOT 订单", `订单：${orderNo}`].join("\n"),
   );
 
   await pushMessage("assistant", "小助手正在进行订单状态查询。");
@@ -630,7 +640,7 @@ async function runOrderFlow() {
       "明细信息：",
       "订单来源：CMIOT 订单",
       "订单形态：单订单",
-      "订单号 / 批量任务号：MO202604230001",
+      `订单号 / 批量任务号：${orderNo}`,
       "当前状态：执行中 / 长时间未完成",
       "已执行时长：42 分钟",
       "是否疑似卡单：是，超过常规执行时长阈值",
@@ -642,7 +652,7 @@ async function runOrderFlow() {
     ].join("\n"),
     "warning",
   );
-  intake.value.latestResult = "已查询到 CMIOT 单订单执行中且长时间未完成，疑似卡单，建议继续等待短周期回执或转人工检查下游任务。";
+  intake.value.latestResult = `已查询到订单 ${orderNo} 为 CMIOT 单订单，当前执行中且长时间未完成，疑似卡单，建议继续等待短周期回执或转人工检查下游任务。`;
   await pushMessage("assistant", "请您继续您的操作。");
   phase.value = "result-actions";
 }
@@ -706,7 +716,10 @@ async function executeAction(actionLabel: string) {
   phase.value = "executing";
   pushMessage("system", `已进行${actionLabel}操作，请不要关闭页面，耐心等待。`, "info");
   await runProgress("执行处理中", `正在执行${actionLabel}操作，请稍候。`, 8000);
-  const resultMessage = `执行成功，用户${intake.value.userKey}的${intake.value.issue}问题已解决，请核查！`;
+  const resultMessage =
+    intake.value.entryId === "order"
+      ? `执行成功，订单${displayOrderNo(intake.value.userKey)}的${intake.value.issue}问题已解决，请核查！`
+      : `执行成功，用户${intake.value.userKey}的${intake.value.issue}问题已解决，请核查！`;
   intake.value.latestResult = resultMessage;
   await pushMessage("assistant", resultMessage, "success");
   phase.value = "finished";
@@ -717,7 +730,7 @@ function buildManualSummary() {
   return [
     "异常情况摘要：",
     `排障类型：${entryLabel}`,
-    `异常用户：${intake.value.userKey || "未识别"}`,
+    `${intake.value.entryId === "order" ? "异常订单" : "异常用户"}：${intake.value.userKey || "未识别"}`,
     `异常问题：${intake.value.issue || "用户反馈未解决"}`,
     `原始描述：${intake.value.originalText || "无"}`,
     uploadedImageName.value ? `补充材料：已上传图片 ${uploadedImageName.value}` : "补充材料：无",
