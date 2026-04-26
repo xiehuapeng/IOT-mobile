@@ -187,6 +187,8 @@ const entryActions: QuickAction[] = [
   { id: "realname", label: "实名异常处理" },
 ];
 
+const phoneNumberPattern = /(?:^|[^\d])(1[3-9]\d{9})(?!\d)/;
+
 const phase = ref<Phase>("entry");
 const messages = ref<ConversationMessage[]>([]);
 const draft = ref("");
@@ -202,6 +204,8 @@ const progressPercent = ref(0);
 const realnameForm = ref({ name: "", idNo: "" });
 const conversationScrollRef = ref<HTMLElement | null>(null);
 const timers: number[] = [];
+let streamVersion = 0;
+let assistantStreamQueue: Promise<void> = Promise.resolve();
 const sidebarVisible = ref(false);
 const toastVisible = ref(false);
 let toastTimer = 0;
@@ -209,7 +213,7 @@ let toastTimer = 0;
 const showComposer = computed(() => !["diagnosing", "executing", "finished", "realname-completion"].includes(phase.value));
 const showRealnameCompletion = computed(() => phase.value === "realname-completion");
 const sidebarMessages = computed(() => [...messages.value].reverse());
-const latestMessageId = computed(() => messages.value.at(-1)?.id ?? "");
+const latestMessageId = computed(() => messages.value[messages.value.length - 1]?.id ?? "");
 const accountManagerName = computed(() => {
   const name = appState.user?.name?.trim() || "当前账号";
   return /经理|客户经理/.test(name) ? name : `${name}客户经理`;
@@ -260,15 +264,66 @@ function nowText() {
   return new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
-function pushMessage(role: ConversationMessage["role"], content: string, tone?: ConversationMessage["tone"]) {
-  messages.value.push({
+function createMessage(role: ConversationMessage["role"], content: string, tone?: ConversationMessage["tone"]): ConversationMessage {
+  return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     role,
     content,
     timestamp: nowText(),
     tone,
+  };
+}
+
+function delay(delayMs: number) {
+  return new Promise<void>((resolve) => {
+    const timer = window.setTimeout(() => {
+      const index = timers.indexOf(timer);
+      if (index >= 0) timers.splice(index, 1);
+      resolve();
+    }, delayMs);
+    timers.push(timer);
   });
+}
+
+function getStreamStep(content: string, index: number) {
+  if (content[index] === "\n") return 1;
+  return /[a-zA-Z0-9]/.test(content[index]) ? 2 : 1;
+}
+
+async function streamAssistantMessage(message: ConversationMessage, content: string, version: number) {
+  if (version !== streamVersion) return;
+  const messageIndex = messages.value.length;
+  messages.value.push(message);
   scrollConversationToBottom();
+
+  for (let index = 0; index < content.length; index += getStreamStep(content, index)) {
+    if (version !== streamVersion) return;
+    const nextIndex = Math.min(content.length, index + getStreamStep(content, index));
+    messages.value[messageIndex] = {
+      ...messages.value[messageIndex],
+      content: content.slice(0, nextIndex),
+    };
+    scrollConversationToBottom();
+    await delay(content[index] === "\n" ? 180 : 45);
+  }
+}
+
+function pushMessage(
+  role: ConversationMessage["role"],
+  content: string,
+  tone?: ConversationMessage["tone"],
+  options?: { stream?: boolean },
+) {
+  if (role !== "assistant" || options?.stream === false) {
+    messages.value.push(createMessage(role, content, tone));
+    scrollConversationToBottom();
+    return Promise.resolve();
+  }
+
+  const version = streamVersion;
+  const message = createMessage(role, "", tone);
+  assistantStreamQueue = assistantStreamQueue.then(() => streamAssistantMessage(message, content, version));
+  return assistantStreamQueue;
 }
 
 function roleLabel(role: ConversationMessage["role"]) {
@@ -303,6 +358,8 @@ function schedule(callback: () => void, delay: number) {
 }
 
 function clearTimers() {
+  streamVersion += 1;
+  assistantStreamQueue = Promise.resolve();
   timers.splice(0).forEach((timer) => window.clearTimeout(timer));
 }
 
@@ -321,17 +378,34 @@ function resetFlow() {
   progressPercent.value = 0;
   realnameForm.value = { name: "", idNo: "" };
   messages.value = [];
-  pushMessage("assistant", `你好，${accountManagerName.value}，我是您的排障小助手，请问我有什么可以帮助您？`);
+  pushMessage("assistant", `你好，${accountManagerName.value}，我是您的排障小助手，请问我有什么可以帮助您？`, undefined, { stream: false });
 }
 
 async function startOrderFlowFromAlert(orderNo: string) {
+  const normalizedOrderNo = extractOrderNo(orderNo);
   clearTimers();
   draft.value = "";
+  if (!normalizedOrderNo) {
+    intake.value = {
+      entryId: "order",
+      userKey: "",
+      issue: "",
+      originalText: orderNo,
+      latestResult: "",
+    };
+    progressTask.value = null;
+    progressPercent.value = 0;
+    realnameForm.value = { name: "", idNo: "" };
+    messages.value = [];
+    phase.value = "collecting";
+    pushMessage("assistant", missingMessage("order"), "warning");
+    return;
+  }
   intake.value = {
     entryId: "order",
-    userKey: orderNo,
+    userKey: normalizedOrderNo,
     issue: "订单异常处理",
-    originalText: `订单号：${orderNo}，来自消息提醒的订单异常处理`,
+    originalText: `订单号：${normalizedOrderNo}，来自消息提醒的订单异常处理`,
     latestResult: "",
   };
   progressTask.value = null;
@@ -339,8 +413,8 @@ async function startOrderFlowFromAlert(orderNo: string) {
   realnameForm.value = { name: "", idNo: "" };
   messages.value = [];
   phase.value = "confirming";
-  pushMessage("assistant", `已收到订单监控提醒，正在为订单 ${orderNo} 发起异常处理流程。`);
-  pushMessage("system", `已自动带入订单号 ${orderNo}，开始诊断执行状态与异常原因。`, "info");
+  pushMessage("assistant", `已收到订单监控提醒，正在为订单 ${normalizedOrderNo} 发起异常处理流程。`);
+  pushMessage("system", `已自动带入订单号 ${normalizedOrderNo}，开始诊断执行状态与异常原因。`, "info");
   await nextTick();
   await startTroubleshooting();
 }
@@ -451,7 +525,7 @@ function selectEntry(entryId: TroubleshootingEntryId) {
     return;
   }
   if (entryId === "order") {
-    pushMessage("assistant", "小助手已准备就绪，请您提供下您的手机号或者订单号以及出现的问题。");
+    pushMessage("assistant", "小助手已准备就绪，请您提供20位数字订单号即可开始排障。");
     return;
   }
   pushMessage("assistant", "小助手已准备就绪，请您提供下您的手机号以及出现的问题。");
@@ -471,26 +545,42 @@ function collectProblem(text: string) {
   intake.value.originalText = text;
   intake.value.issue = summarizeIssue(text, entryId);
   phase.value = "confirming";
+  const subjectLabel = entryId === "order" ? "异常订单" : "异常用户";
   pushMessage(
     "assistant",
-    `小助手已收到您的问题，异常用户：${intake.value.userKey}，异常问题：${intake.value.issue}，您还有什么需要补充，比如异常界面截图等等。`,
+    `小助手已收到您的问题，${subjectLabel}：${intake.value.userKey}，异常问题：${intake.value.issue}，您还有什么需要补充，比如异常界面截图等等。`,
   );
 }
 
 function missingMessage(entryId: TroubleshootingEntryId) {
   if (entryId === "communication") return "我需要您提供手机号或者ICCID。";
-  if (entryId === "order") return "我需要您提供手机号或订单号，并描述具体订单异常问题。";
+  if (entryId === "order") return "订单号格式不正确，请确认后重新输入20位数字订单号。";
   return "我需要您提供手机号，并描述具体实名异常问题。";
 }
 
+function extractPhoneNumber(text: string) {
+  return text.match(phoneNumberPattern)?.[1] ?? "";
+}
+
+function displayPhone(fallback: string) {
+  return extractPhoneNumber(intake.value.originalText) || extractPhoneNumber(intake.value.userKey) || fallback;
+}
+
+function extractOrderNo(text: string) {
+  return text.match(/(?:订单号|订单|工单号|单号)[:：]?\s*(\d{20})(?!\d)/)?.[1] ?? text.match(/(?:^|\D)(\d{20})(?!\d)/)?.[1] ?? "";
+}
+
+function displayOrderNo(fallback: string) {
+  return extractOrderNo(intake.value.userKey) || extractOrderNo(intake.value.originalText) || fallback;
+}
+
 function extractUserKey(text: string, entryId: TroubleshootingEntryId) {
-  const phone = text.match(/1[3-9]\d{9}/)?.[0];
+  const phone = extractPhoneNumber(text);
   const iccid = text.match(/89\d{10,20}/)?.[0];
-  const demoPhone = text.match(/(?:手机号|号码|用户|联系电话)[:：]?\s*([A-Z0-9]{6,})/i)?.[1];
-  const orderNo = text.match(/(?:订单号|订单|工单号|单号)[:：]?\s*([A-Z0-9]{6,})/i)?.[1] ?? text.match(/[A-Z]{1,3}\d{6,}|\d{8,}[A-Z]?/i)?.[0];
+  const orderNo = extractOrderNo(text);
 
   if (entryId === "communication") return phone ?? iccid ?? "";
-  if (entryId === "order") return phone ?? orderNo ?? demoPhone ?? "";
+  if (entryId === "order") return orderNo || "";
   return phone ?? "";
 }
 
@@ -551,10 +641,11 @@ function runProgress(title: string, description: string, duration: number) {
 
 async function runCommunicationFlow() {
   await runProgress("智能诊断统一入口", "正在调用智能诊断统一入口，请稍候。", 3000);
-  pushMessage(
+  await pushMessage(
     "assistant",
     [
       "已完成 SIM 信息诊断：",
+      `用户：${displayPhone("13800138000")}`,
       `SIM 信息：${intake.value.userKey.startsWith("89") ? intake.value.userKey : "89860422102468000124"}`,
       "卡状态：停机保号",
       "是否停机：是",
@@ -565,9 +656,10 @@ async function runCommunicationFlow() {
   );
 
   await runProgress("故障原因排查", "正在进行故障原因排查，请稍候。", 5000);
-  pushMessage(
+  await pushMessage(
     "assistant",
     [
+      `用户：${displayPhone("13800138000")}`,
       "SIM 卡信息：89860422102468000124",
       "生命周期 / 卡状态：停机保号",
       "停机时间：2026-04-23 09:18:32",
@@ -584,21 +676,23 @@ async function runCommunicationFlow() {
     "warning",
   );
   intake.value.latestResult = "已排查到停机保号，停机原因是账户欠费触发系统停机，建议复机后复测数据、短信和语音能力。";
-  pushMessage("assistant", "我已排查到具体原因，请您选择接下来的操作。");
+  await pushMessage("assistant", "我已排查到具体原因，请您选择接下来的操作。");
   phase.value = "result-actions";
 }
 
 async function runOrderFlow() {
+  const orderNo = displayOrderNo("20260423000100000001");
+
   await runProgress("智能诊断统一入口", "正在调用智能诊断统一入口，请稍候。", 5000);
-  pushMessage(
+  await pushMessage(
     "assistant",
-    ["用户：13900139001", "订单来源：CMIOT 订单", "订单：MO202604230001"].join("\n"),
+    ["订单来源：CMIOT 订单", `订单：${orderNo}`].join("\n"),
   );
 
-  pushMessage("assistant", "小助手正在进行订单状态查询。");
+  await pushMessage("assistant", "小助手正在进行订单状态查询。");
   await runProgress("订单状态查询", "正在查询订单状态，请稍候。", 5000);
-  pushMessage("assistant", ["当前订单状态：执行中", "执行时间：42 分钟", "是否超时：是"].join("\n"), "info");
-  pushMessage(
+  await pushMessage("assistant", ["当前订单状态：执行中", "执行时间：42 分钟", "是否超时：是"].join("\n"), "info");
+  await pushMessage(
     "assistant",
     [
       "我已查询到具体订单信息：",
@@ -612,7 +706,7 @@ async function runOrderFlow() {
       "明细信息：",
       "订单来源：CMIOT 订单",
       "订单形态：单订单",
-      "订单号 / 批量任务号：MO202604230001",
+      `订单号 / 批量任务号：${orderNo}`,
       "当前状态：执行中 / 长时间未完成",
       "已执行时长：42 分钟",
       "是否疑似卡单：是，超过常规执行时长阈值",
@@ -624,8 +718,8 @@ async function runOrderFlow() {
     ].join("\n"),
     "warning",
   );
-  intake.value.latestResult = "已查询到 CMIOT 单订单执行中且长时间未完成，疑似卡单，建议继续等待短周期回执或转人工检查下游任务。";
-  pushMessage("assistant", "请您继续您的操作。");
+  intake.value.latestResult = `已查询到订单 ${orderNo} 为 CMIOT 单订单，当前执行中且长时间未完成，疑似卡单，建议继续等待短周期回执或转人工检查下游任务。`;
+  await pushMessage("assistant", "请您继续您的操作。");
   phase.value = "result-actions";
 }
 
@@ -637,12 +731,12 @@ async function runRealnameFlow() {
     : "实名订单处理失败，失败原因疑似姓名/证件号不一致，可完善资料后重新认证或转人工处理。";
 
   await runProgress("智能诊断统一入口", "正在调用智能诊断统一入口，请稍候。", 5000);
-  pushMessage("assistant", [`用户：${intake.value.userKey || "13700137002"}`, "实名查询时间：2026-04-23 09:18:32"].join("\n"));
+  await pushMessage("assistant", [`用户：${displayPhone("13700137002")}`, "实名查询时间：2026-04-23 09:18:32"].join("\n"));
 
-  pushMessage("assistant", "正在进行查询状态确认。");
+  await pushMessage("assistant", "正在进行查询状态确认。");
   await runProgress("实名状态查询", "正在查询实名状态，请稍候。", 5000);
-  pushMessage("assistant", ["实名查询状态：失败", "查询结束时间：2026-04-23 09:22:10", `失败原因：${failureReason}`].join("\n"), "warning");
-  pushMessage(
+  await pushMessage("assistant", ["实名查询状态：失败", "查询结束时间：2026-04-23 09:22:10", `失败原因：${failureReason}`].join("\n"), "warning");
+  await pushMessage(
     "assistant",
     [
       "我已确认查询状态，结果如下：",
@@ -670,7 +764,7 @@ async function runRealnameFlow() {
     "warning",
   );
   intake.value.latestResult = `已确认实名查询失败，失败原因疑似${failureReason}，建议${incompleteProfile ? "补充姓名和身份证号后重新认证" : "完善资料后重新认证"}或转人工处理。`;
-  pushMessage("assistant", "请选择您要执行的操作。");
+  await pushMessage("assistant", "请选择您要执行的操作。");
   phase.value = "result-actions";
 }
 
@@ -688,9 +782,12 @@ async function executeAction(actionLabel: string) {
   phase.value = "executing";
   pushMessage("system", `已进行${actionLabel}操作，请不要关闭页面，耐心等待。`, "info");
   await runProgress("执行处理中", `正在执行${actionLabel}操作，请稍候。`, 8000);
-  const resultMessage = `执行成功，用户${intake.value.userKey}的${intake.value.issue}问题已解决，请核查！`;
+  const resultMessage =
+    intake.value.entryId === "order"
+      ? `执行成功，订单${displayOrderNo(intake.value.userKey)}的${intake.value.issue}问题已解决，请核查！`
+      : `执行成功，用户${intake.value.userKey}的${intake.value.issue}问题已解决，请核查！`;
   intake.value.latestResult = resultMessage;
-  pushMessage("assistant", resultMessage, "success");
+  await pushMessage("assistant", resultMessage, "success");
   phase.value = "finished";
 }
 
@@ -699,7 +796,7 @@ function buildManualSummary() {
   return [
     "异常情况摘要：",
     `排障类型：${entryLabel}`,
-    `异常用户：${intake.value.userKey || "未识别"}`,
+    `${intake.value.entryId === "order" ? "异常订单" : "异常用户"}：${intake.value.userKey || "未识别"}`,
     `异常问题：${intake.value.issue || "用户反馈未解决"}`,
     `原始描述：${intake.value.originalText || "无"}`,
     "补充材料：无",

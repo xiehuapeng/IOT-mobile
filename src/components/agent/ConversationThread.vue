@@ -63,11 +63,13 @@ const roleLabelMap = {
 };
 
 watch(
-  () => props.messages.at(-1),
-  (message) => {
+  () => props.messages[props.messages.length - 1]?.id ?? "",
+  (messageId) => {
     window.clearInterval(typingTimer);
     typingMessageId.value = null;
     typingLength.value = 0;
+    const message = props.messages[props.messages.length - 1];
+    if (!messageId) return;
     if (!props.typewriter || !message || message.role !== "assistant") return;
 
     typingMessageId.value = message.id;
