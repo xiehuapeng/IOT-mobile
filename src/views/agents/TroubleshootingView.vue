@@ -188,6 +188,8 @@ const entryActions: QuickAction[] = [
 ];
 
 const phoneNumberPattern = /(?:^|[^\d])(1[3-9]\d{9})(?!\d)/;
+const iccidPattern = /(?:^|[^\d])(89\d{17,18})(?!\d)/;
+const numericOrderPattern = /(?:^|[^\d])(\d{1,20})(?!\d)/;
 
 const phase = ref<Phase>("entry");
 const messages = ref<ConversationMessage[]>([]);
@@ -440,7 +442,10 @@ function sendText() {
   pushMessage("user", text);
 
   if (phase.value === "entry") {
-    pushMessage("assistant", "我可以进行通信异常处理、订单异常处理、实名异常处理，请问您遇到哪方面问题？", "info");
+    if (tryStartFromEntryText(text)) {
+      return;
+    }
+    pushMessage("assistant", "我可以进行通信异常处理、订单异常处理、实名异常处理。您也可以直接输入异常描述，并带上手机号、ICCID或订单号，我会自动识别并开始排障。", "info");
     return;
   }
 
@@ -458,6 +463,41 @@ function sendText() {
     intake.value.issue = summarizeIssue(intake.value.originalText, intake.value.entryId);
     pushMessage("assistant", "补充信息已收到，是否开始排障？");
   }
+}
+
+function tryStartFromEntryText(text: string) {
+  const entryId = detectEntryFromText(text);
+  if (!entryId) return false;
+
+  intake.value = {
+    entryId,
+    userKey: "",
+    issue: "",
+    originalText: text,
+    latestResult: "",
+  };
+
+  const userKey = extractUserKey(text, entryId);
+  if (!userKey) {
+    phase.value = "collecting";
+    pushMessage("assistant", missingMessage(entryId), "warning");
+    return true;
+  }
+
+  intake.value.userKey = userKey;
+  intake.value.issue = summarizeIssue(text, entryId);
+  phase.value = "confirming";
+
+  const autoSummary =
+    entryId === "communication"
+      ? `已识别为通信异常，已提取${userKey.startsWith("89") ? "ICCID" : "手机号"} ${userKey}，正在开始排障。`
+      : entryId === "order"
+        ? `已识别为订单异常，已提取订单号 ${userKey}，正在开始排障。`
+        : `已识别为实名异常，已提取订单号 ${userKey}，正在开始排障。`;
+
+  pushMessage("assistant", autoSummary, "info");
+  void startTroubleshooting();
+  return true;
 }
 
 function handleQuickAction(actionId: QuickActionId) {
@@ -521,14 +561,14 @@ function selectEntry(entryId: TroubleshootingEntryId) {
   pushMessage("user", entryLabels[entryId]);
 
   if (entryId === "communication") {
-    pushMessage("assistant", "小助手已准备就绪，请您提供下您的手机号或者ICCID以及出现的问题。");
+    pushMessage("assistant", "小助手已准备就绪，请您提供11位手机号或19/20位纯数字 ICCID，以及出现的问题。");
     return;
   }
   if (entryId === "order") {
-    pushMessage("assistant", "小助手已准备就绪，请您提供20位数字订单号即可开始排障。");
+    pushMessage("assistant", "小助手已准备就绪，请您提供纯数字且不超过20位的订单号即可开始排障。");
     return;
   }
-  pushMessage("assistant", "小助手已准备就绪，请您提供下您的手机号以及出现的问题。");
+  pushMessage("assistant", "小助手已准备就绪，请您提供实名异常订单号，格式为纯数字且不超过20位。");
 }
 
 function collectProblem(text: string) {
@@ -545,7 +585,7 @@ function collectProblem(text: string) {
   intake.value.originalText = text;
   intake.value.issue = summarizeIssue(text, entryId);
   phase.value = "confirming";
-  const subjectLabel = entryId === "order" ? "异常订单" : "异常用户";
+  const subjectLabel = entryId === "communication" ? "异常用户" : "异常订单";
   pushMessage(
     "assistant",
     `小助手已收到您的问题，${subjectLabel}：${intake.value.userKey}，异常问题：${intake.value.issue}，您还有什么需要补充，比如异常界面截图等等。`,
@@ -553,21 +593,25 @@ function collectProblem(text: string) {
 }
 
 function missingMessage(entryId: TroubleshootingEntryId) {
-  if (entryId === "communication") return "我需要您提供手机号或者ICCID。";
-  if (entryId === "order") return "订单号格式不正确，请确认后重新输入20位数字订单号。";
-  return "我需要您提供手机号，并描述具体实名异常问题。";
+  if (entryId === "communication") return "请提供11位手机号或19/20位纯数字 ICCID，我就可以直接开始通信排障。";
+  if (entryId === "order") return "订单号格式不正确，请确认后重新输入纯数字且不超过20位的订单号。";
+  return "请提供实名异常订单号，格式为纯数字且不超过20位，我就可以直接开始实名排障。";
 }
 
 function extractPhoneNumber(text: string) {
   return text.match(phoneNumberPattern)?.[1] ?? "";
 }
 
+function extractIccid(text: string) {
+  return text.match(iccidPattern)?.[1] ?? "";
+}
+
 function displayPhone(fallback: string) {
-  return extractPhoneNumber(intake.value.originalText) || extractPhoneNumber(intake.value.userKey) || fallback;
+  return extractPhoneNumber(intake.value.originalText) || extractPhoneNumber(intake.value.userKey) || extractIccid(intake.value.originalText) || extractIccid(intake.value.userKey) || fallback;
 }
 
 function extractOrderNo(text: string) {
-  return text.match(/(?:订单号|订单|工单号|单号)[:：]?\s*(\d{20})(?!\d)/)?.[1] ?? text.match(/(?:^|\D)(\d{20})(?!\d)/)?.[1] ?? "";
+  return text.match(/(?:订单号|订单|工单号|单号)[:：]?\s*(\d{1,20})(?!\d)/)?.[1] ?? text.match(numericOrderPattern)?.[1] ?? "";
 }
 
 function displayOrderNo(fallback: string) {
@@ -576,12 +620,29 @@ function displayOrderNo(fallback: string) {
 
 function extractUserKey(text: string, entryId: TroubleshootingEntryId) {
   const phone = extractPhoneNumber(text);
-  const iccid = text.match(/89\d{10,20}/)?.[0];
+  const iccid = extractIccid(text);
   const orderNo = extractOrderNo(text);
 
-  if (entryId === "communication") return phone ?? iccid ?? "";
+  if (entryId === "communication") return phone || iccid || "";
   if (entryId === "order") return orderNo || "";
-  return phone ?? "";
+  return orderNo || "";
+}
+
+function detectEntryFromText(text: string): TroubleshootingEntryId | null {
+  const lowered = text.toLowerCase();
+  const hasOrderNo = Boolean(extractOrderNo(text));
+  const hasPhone = Boolean(extractPhoneNumber(text));
+  const hasIccid = Boolean(extractIccid(text));
+  const realnameKeywords = /实名|认证|证件|身份证|姓名|资料|人证/.test(lowered);
+  const orderKeywords = /订单|工单|卡单|执行失败|执行异常|超时|未完成/.test(lowered);
+  const communicationKeywords = /通信|短信|验证码|语音|通话|上网|流量|网络|停机|保号|iccid|手机号/.test(lowered);
+
+  if (realnameKeywords) return "realname";
+  if (communicationKeywords && (hasPhone || hasIccid || !hasOrderNo)) return "communication";
+  if (orderKeywords) return "order";
+  if (hasPhone || hasIccid) return "communication";
+  if (hasOrderNo && /异常|失败|超时|处理/.test(lowered)) return "order";
+  return null;
 }
 
 function summarizeIssue(text: string, entryId: TroubleshootingEntryId | null) {
@@ -640,13 +701,15 @@ function runProgress(title: string, description: string, duration: number) {
 }
 
 async function runCommunicationFlow() {
+  const communicationKey = displayPhone("13800138000");
+  const isIccid = communicationKey.startsWith("89");
   await runProgress("智能诊断统一入口", "正在调用智能诊断统一入口，请稍候。", 3000);
   await pushMessage(
     "assistant",
     [
       "已完成 SIM 信息诊断：",
-      `用户：${displayPhone("13800138000")}`,
-      `SIM 信息：${intake.value.userKey.startsWith("89") ? intake.value.userKey : "89860422102468000124"}`,
+      `${isIccid ? "ICCID" : "用户"}：${communicationKey}`,
+      `SIM 信息：${isIccid ? communicationKey : "89860422102468000124"}`,
       "卡状态：停机保号",
       "是否停机：是",
       "短信服务是否异常：否",
@@ -659,8 +722,8 @@ async function runCommunicationFlow() {
   await pushMessage(
     "assistant",
     [
-      `用户：${displayPhone("13800138000")}`,
-      "SIM 卡信息：89860422102468000124",
+      `${isIccid ? "ICCID" : "用户"}：${communicationKey}`,
+      `SIM 卡信息：${isIccid ? communicationKey : "89860422102468000124"}`,
       "生命周期 / 卡状态：停机保号",
       "停机时间：2026-04-23 09:18:32",
       "停机原因：账户欠费触发系统停机",
@@ -729,9 +792,10 @@ async function runRealnameFlow() {
   const failureSummary = incompleteProfile
     ? "实名订单处理失败，失败原因疑似资料不完整，请先完善实名信息（姓名和身份证号）后重新认证或转人工处理。"
     : "实名订单处理失败，失败原因疑似姓名/证件号不一致，可完善资料后重新认证或转人工处理。";
+  const realnameOrderNo = displayOrderNo("222222222222222222");
 
   await runProgress("智能诊断统一入口", "正在调用智能诊断统一入口，请稍候。", 5000);
-  await pushMessage("assistant", [`用户：${displayPhone("13700137002")}`, "实名查询时间：2026-04-23 09:18:32"].join("\n"));
+  await pushMessage("assistant", [`实名订单号：${realnameOrderNo}`, "实名查询时间：2026-04-23 09:18:32"].join("\n"));
 
   await pushMessage("assistant", "正在进行查询状态确认。");
   await runProgress("实名状态查询", "正在查询实名状态，请稍候。", 5000);
@@ -750,7 +814,7 @@ async function runRealnameFlow() {
       "状态同步情况",
       "",
       "明细信息：",
-      "实名订单号：222222222222222222",
+      `实名订单号：${realnameOrderNo}`,
       "当前状态：失败",
       `结果明细：${failureReason}`,
       "",
@@ -783,7 +847,7 @@ async function executeAction(actionLabel: string) {
   pushMessage("system", `已进行${actionLabel}操作，请不要关闭页面，耐心等待。`, "info");
   await runProgress("执行处理中", `正在执行${actionLabel}操作，请稍候。`, 8000);
   const resultMessage =
-    intake.value.entryId === "order"
+    intake.value.entryId === "order" || intake.value.entryId === "realname"
       ? `执行成功，订单${displayOrderNo(intake.value.userKey)}的${intake.value.issue}问题已解决，请核查！`
       : `执行成功，用户${intake.value.userKey}的${intake.value.issue}问题已解决，请核查！`;
   intake.value.latestResult = resultMessage;
@@ -796,7 +860,7 @@ function buildManualSummary() {
   return [
     "异常情况摘要：",
     `排障类型：${entryLabel}`,
-    `${intake.value.entryId === "order" ? "异常订单" : "异常用户"}：${intake.value.userKey || "未识别"}`,
+    `${intake.value.entryId === "communication" ? "异常用户" : "异常订单"}：${intake.value.userKey || "未识别"}`,
     `异常问题：${intake.value.issue || "用户反馈未解决"}`,
     `原始描述：${intake.value.originalText || "无"}`,
     "补充材料：无",
