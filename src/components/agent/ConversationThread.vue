@@ -15,18 +15,21 @@
         :class="[message.role, message.tone ?? 'normal', { copied: copiedId === message.id }]"
         @click="copyMessage(message)"
       >
-        <div class="message-meta">
-          <span>{{ roleLabelMap[message.role] }}</span>
-          <small>{{ copiedId === message.id ? "已复制" : message.timestamp }}</small>
+        <img v-if="message.role === 'assistant'" class="message-avatar" :src="assistantAvatarSrc" alt="助手头像" />
+        <div class="message-bubble">
+          <div class="message-meta">
+            <span>{{ roleLabelMap[message.role] }}</span>
+            <small>{{ copiedId === message.id ? "已复制" : message.timestamp }}</small>
+          </div>
+          <p>{{ visibleContent(message) }}<span v-if="isTyping(message)" class="typing-caret"></span></p>
         </div>
-        <p>{{ message.content }}</p>
       </button>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 import type { ConversationMessage } from "../../types/agent";
 
@@ -35,20 +38,64 @@ const props = withDefaults(
     messages: ConversationMessage[];
     compact?: boolean;
     variant?: "panel" | "plain";
+    typewriter?: boolean;
+    assistantAvatarId?: string;
   }>(),
   {
     compact: false,
     variant: "panel",
+    typewriter: false,
+    assistantAvatarId: "rule-config",
   },
 );
 
 const copiedId = ref<string | null>(null);
+const typingMessageId = ref<string | null>(null);
+const typingLength = ref(0);
+let typingTimer = 0;
+
+const assistantAvatarSrc = computed(() => `${import.meta.env.BASE_URL}agent-avatars/${props.assistantAvatarId}.png`);
 
 const roleLabelMap = {
   assistant: "助手",
   user: "你",
   system: "系统",
 };
+
+watch(
+  () => props.messages.at(-1),
+  (message) => {
+    window.clearInterval(typingTimer);
+    typingMessageId.value = null;
+    typingLength.value = 0;
+    if (!props.typewriter || !message || message.role !== "assistant") return;
+
+    typingMessageId.value = message.id;
+    typingLength.value = Math.min(2, message.content.length);
+    typingTimer = window.setInterval(() => {
+      typingLength.value += 2;
+      if (typingLength.value >= message.content.length) {
+        typingLength.value = message.content.length;
+        typingMessageId.value = null;
+        window.clearInterval(typingTimer);
+      }
+    }, 28);
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  window.clearInterval(typingTimer);
+});
+
+function visibleContent(message: ConversationMessage) {
+  if (message.id !== typingMessageId.value) return message.content;
+  return message.content.slice(0, typingLength.value);
+}
+
+function isTyping(message: ConversationMessage) {
+  return message.id === typingMessageId.value;
+}
 
 async function copyMessage(message: ConversationMessage) {
   try {
@@ -98,51 +145,69 @@ async function copyMessage(message: ConversationMessage) {
 
 .message {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
   max-width: 86%;
   min-width: 0;
-  padding: 14px 15px;
-  border-radius: 20px;
-  border: 1px solid rgba(152, 192, 255, 0.12);
-  background: rgba(8, 31, 61, 0.62);
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text-main);
   text-align: left;
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    background 0.18s ease;
+  transition: transform 0.18s ease;
 }
 
 .message:hover {
   transform: translateY(-1px);
-  border-color: rgba(120, 192, 255, 0.32);
-}
-
-.message.copied {
-  border-color: rgba(85, 222, 156, 0.42);
 }
 
 .message.user {
   margin-left: auto;
-  background: linear-gradient(135deg, rgba(44, 128, 255, 0.88), rgba(66, 206, 255, 0.72));
   color: #f5fbff;
 }
 
 .message.system {
   max-width: 100%;
-  background: rgba(18, 53, 101, 0.56);
 }
 
 .messages.compact .message {
   max-width: 100%;
 }
 
-.message.success {
+.message-avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.86);
+}
+
+.message-bubble {
+  min-width: 0;
+  padding: 14px 15px;
+  border-radius: 20px;
+  border: 1px solid rgba(152, 192, 255, 0.12);
+  background: rgba(8, 31, 61, 0.62);
+}
+
+.message.user .message-bubble {
+  background: linear-gradient(135deg, rgba(44, 128, 255, 0.88), rgba(66, 206, 255, 0.72));
+}
+
+.message.system .message-bubble {
+  background: rgba(18, 53, 101, 0.56);
+}
+
+.message.copied .message-bubble {
+  border-color: rgba(85, 222, 156, 0.42);
+}
+
+.message.success .message-bubble {
   border-color: rgba(85, 222, 156, 0.3);
 }
 
-.message.warning {
+.message.warning .message-bubble {
   border-color: rgba(255, 179, 77, 0.34);
 }
 
@@ -163,5 +228,21 @@ async function copyMessage(message: ConversationMessage) {
   margin: 0;
   line-height: 1.7;
   white-space: pre-wrap;
+}
+
+.typing-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.16em;
+  background: currentColor;
+  animation: caret-blink 0.8s steps(1) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
 }
 </style>

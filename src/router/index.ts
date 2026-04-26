@@ -6,6 +6,7 @@ import { isAuthenticated } from "../stores/appState";
 import AgentPlazaView from "../views/AgentPlazaView.vue";
 import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/LoginView.vue";
+import MessageCenterView from "../views/MessageCenterView.vue";
 import MyRulesView from "../views/MyRulesView.vue";
 import AgentPlaceholderView from "../views/agents/AgentPlaceholderView.vue";
 import RuleConfigView from "../views/agents/RuleConfigView.vue";
@@ -47,6 +48,11 @@ const router = createRouter({
           path: "plaza",
           component: AgentPlazaView,
           meta: { title: "智能体广场" },
+        },
+        {
+          path: "message-center",
+          component: MessageCenterView,
+          meta: { title: "消息中心" },
         },
         {
           path: "my-rules",

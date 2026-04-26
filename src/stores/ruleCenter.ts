@@ -117,3 +117,5 @@ export const errorRules = computed(() => ruleCenter.rules.filter((item) => item.
 export const completedRules = computed(() => ruleCenter.rules.filter((item) => item.status === "completed"));
 export const terminatedRules = computed(() => ruleCenter.rules.filter((item) => item.status === "terminated"));
 export const recentAlerts = computed(() => ruleCenter.alerts.slice(0, 5));
+export const unreadAlerts = computed(() => ruleCenter.alerts.filter((item) => item.followUpStatus === "new"));
+export const unreadAlertCount = computed(() => unreadAlerts.value.length);

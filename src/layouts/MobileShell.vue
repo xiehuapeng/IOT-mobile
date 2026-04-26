@@ -1,10 +1,19 @@
 <template>
   <DeviceFrame>
-    <div class="shell">
-      <AppDrawer :open="appState.drawerOpen" :user="appState.user" @close="closeDrawer" @logout="handleLogout" />
+    <div class="shell" :class="{ 'is-portal-home': isPortalHome, 'is-agent-screen': isAgentScreen }">
+      <AppDrawer
+        :open="appState.drawerOpen"
+        :user="appState.user"
+        :unread-count="unreadAlertCount"
+        @close="closeDrawer"
+        @logout="handleLogout"
+      />
 
-      <header class="app-bar">
-        <button class="icon-button" type="button" @click="toggleDrawer">菜单</button>
+      <header v-if="!isPortalHome" class="app-bar">
+        <button class="icon-button menu-button" type="button" @click="toggleDrawer">
+          菜单
+          <span v-if="unreadAlertCount" class="menu-badge">{{ unreadAlertCount > 9 ? "9+" : unreadAlertCount }}</span>
+        </button>
         <div class="bar-title">
           <div class="page-kicker">Workspace</div>
           <strong>{{ routeTitle }}</strong>
@@ -22,40 +31,66 @@
 
       <footer class="bottom-dock">
         <button class="dock-item" type="button" :class="{ active: route.path === '/app/home' }" @click="router.push('/app/home')">
-          <span>首页</span>
-          <small>工作台</small>
+          <span class="dock-icon">⌂</span>
+          <small>首页</small>
         </button>
         <button class="dock-item" type="button" :class="{ active: route.path === '/app/plaza' }" @click="router.push('/app/plaza')">
-          <span>广场</span>
-          <small>助手入口</small>
+          <span class="dock-icon">▦</span>
+          <small>广场</small>
         </button>
-        <button class="dock-item" type="button" @click="openRecentAgent">
-          <span>最近</span>
-          <small>{{ recentShortcutLabel }}</small>
+        <button class="dock-item" type="button" @click="router.push('/app/my-rules')">
+          <span class="dock-icon">♙</span>
+          <small>我的</small>
         </button>
       </footer>
+
+      <transition name="toast-slide">
+        <button
+          v-if="notificationVisible && activeBanner"
+          class="alert-toast"
+          type="button"
+          @click="openMessageCenter"
+        >
+          <strong>消息中心</strong>
+          <p>{{ activeBanner.ruleName }}</p>
+          <small>{{ activeBanner.reason }}</small>
+        </button>
+      </transition>
     </div>
   </DeviceFrame>
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 
 import AppDrawer from "../components/shell/AppDrawer.vue";
 import DeviceFrame from "../components/shell/DeviceFrame.vue";
-import { appState, closeDrawer, logoutDemo, recentAgents, toggleDrawer } from "../stores/appState";
+import { appState, closeDrawer, logoutDemo, toggleDrawer } from "../stores/appState";
+import { ruleCenter, unreadAlertCount } from "../stores/ruleCenter";
+import type { RuleAlertRecord } from "../types/agent";
 
 const route = useRoute();
 const router = useRouter();
 
 const routeTitle = computed(() => String(route.meta.title ?? "智能体广场"));
+const isPortalHome = computed(() => route.path === "/app/home");
 const onPlaza = computed(() => route.path === "/app/plaza");
+const isAgentScreen = computed(() => route.path.startsWith("/app/agents/"));
 const headerActionLabel = computed(() => (onPlaza.value ? "首页" : "广场"));
-const recentShortcutLabel = computed(() => recentAgents.value[0]?.shortName ?? "排障");
+const activeBanner = ref<RuleAlertRecord | null>(null);
+const notificationVisible = ref(false);
+const seenAlertIds = new Set<string>();
+let bannerTimer = 0;
 
 function handleHeaderAction() {
   router.push(onPlaza.value ? "/app/home" : "/app/plaza");
+}
+
+function openMessageCenter() {
+  notificationVisible.value = false;
+  closeDrawer();
+  router.push("/app/message-center");
 }
 
 function handleLogout() {
@@ -63,14 +98,34 @@ function handleLogout() {
   router.push("/login");
 }
 
-function openRecentAgent() {
-  router.push(recentAgents.value[0]?.route ?? "/app/agents/troubleshoot");
-}
-
 watch(
   () => route.path,
   () => closeDrawer(),
 );
+
+watch(
+  () => ruleCenter.alerts[0]?.id,
+  (latestId) => {
+    if (!latestId || seenAlertIds.has(latestId)) return;
+    seenAlertIds.add(latestId);
+    const latest = ruleCenter.alerts[0];
+    if (!latest) return;
+    activeBanner.value = latest;
+    notificationVisible.value = true;
+    window.clearTimeout(bannerTimer);
+    bannerTimer = window.setTimeout(() => {
+      notificationVisible.value = false;
+    }, 3600);
+  },
+);
+
+onMounted(() => {
+  ruleCenter.alerts.forEach((item) => seenAlertIds.add(item.id));
+});
+
+onBeforeUnmount(() => {
+  window.clearTimeout(bannerTimer);
+});
 </script>
 
 <style scoped>
@@ -110,10 +165,43 @@ watch(
   color: var(--text-main);
 }
 
+.menu-button {
+  position: relative;
+}
+
+.menu-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #67d6ff, #2b82ff);
+  color: #f7fbff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .shell-body {
   flex: 1;
   overflow: auto;
   padding: 0 16px 12px;
+}
+
+.is-agent-screen .shell-body {
+  overflow: hidden;
+}
+
+.is-portal-home {
+  height: calc(100% - 38px);
+  background: #f5f7fb;
+}
+
+.is-portal-home .shell-body {
+  padding: 0;
 }
 
 .bottom-dock {
@@ -136,6 +224,13 @@ watch(
   color: var(--text-main);
 }
 
+.dock-icon {
+  display: block;
+  height: 24px;
+  font-size: 24px;
+  line-height: 1;
+}
+
 .dock-item small {
   color: var(--text-secondary);
 }
@@ -143,6 +238,32 @@ watch(
 .dock-item.active {
   border-color: rgba(103, 189, 255, 0.34);
   background: rgba(19, 63, 122, 0.64);
+}
+
+.is-portal-home .bottom-dock {
+  gap: 0;
+  padding: 8px 10px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid #edf0f5;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -8px 18px rgba(20, 44, 80, 0.05);
+}
+
+.is-portal-home .dock-item {
+  min-height: 54px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #596372;
+}
+
+.is-portal-home .dock-item small {
+  color: inherit;
+  font-size: 14px;
+}
+
+.is-portal-home .dock-item.active {
+  color: #168fe8;
+  background: transparent;
 }
 
 .page-slide-enter-active,
@@ -156,5 +277,53 @@ watch(
 .page-slide-leave-to {
   opacity: 0;
   transform: translateY(8px);
+}
+
+.alert-toast {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 92px;
+  z-index: 18;
+  padding: 14px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(129, 196, 255, 0.24);
+  background:
+    linear-gradient(135deg, rgba(34, 86, 153, 0.98), rgba(16, 41, 78, 0.96)),
+    rgba(8, 24, 46, 0.94);
+  color: var(--text-main);
+  text-align: left;
+  box-shadow: 0 18px 38px rgba(0, 10, 24, 0.34);
+}
+
+.alert-toast strong {
+  display: block;
+  font-size: 13px;
+  color: #9ddcff;
+}
+
+.alert-toast p {
+  margin: 6px 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.alert-toast small {
+  display: block;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.toast-slide-enter-active,
+.toast-slide-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.toast-slide-enter-from,
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
 </style>

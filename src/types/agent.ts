@@ -90,8 +90,8 @@ export interface FlowResult {
 export type RuleIntent = "alert" | "order-monitor" | "unsupported";
 export type RuleEntryMode = "quick-alert" | "quick-order" | "natural-language" | "edit";
 export type RuleObjectType = "group" | "account" | "customer" | "order";
-export type RuleAlertType = "red-list-expiry" | "arrears-risk" | "plan-expiry" | "contract-renewal";
-export type RuleAlertTimingMode = "days-before" | "workdays-before" | "condition-hit";
+export type RuleAlertType = "red-list-expiry" | "arrears-risk" | "plan-expiry";
+export type RuleAlertTimingMode = "days-before" | "condition-hit";
 export type RuleMonitorCondition = "in-progress" | "failed" | "timeout" | "status-change";
 export type RuleMonitorTimingMode = "hours-timeout" | "days-timeout" | "status-change" | "scheduled-summary";
 export type RuleMonitorScope = "all-orders" | "specific-order";

@@ -1,9 +1,12 @@
 <template>
-  <div class="page chat-layout">
-    <aside class="section-card sidebar">
+  <div class="page chat-layout" :class="{ 'sidebar-hidden': !sidebarVisible }">
+    <aside v-if="sidebarVisible" class="section-card sidebar">
       <div class="sidebar-head">
-        <div class="page-kicker">History</div>
-        <h3>对话记录</h3>
+        <div>
+          <div class="page-kicker">History</div>
+          <h3>对话记录</h3>
+        </div>
+        <button class="sidebar-toggle" type="button" aria-label="隐藏侧边栏" @click="sidebarVisible = false">‹</button>
       </div>
 
       <div class="history-list">
@@ -15,7 +18,6 @@
           :class="{ active: message.id === latestMessageId }"
           @click="copyHistoryMessage(message.content)"
         >
-          <div class="history-avatar">{{ roleLabel(message.role).slice(0, 1) }}</div>
           <div class="history-content">
             <div class="history-topline">
               <span>{{ roleLabel(message.role) }}</span>
@@ -31,10 +33,13 @@
         <small>查看规则、提醒和全生命周期状态</small>
       </RouterLink>
     </aside>
+    <button v-else class="sidebar-rail" type="button" aria-label="显示侧边栏" @click="sidebarVisible = true">
+      记录
+    </button>
 
     <section class="section-card chat-panel">
       <div class="chat-scroll">
-        <ConversationThread :messages="messages" variant="plain" compact />
+        <ConversationThread :messages="messages" variant="plain" compact typewriter />
 
         <RuleEntryPanel
           v-if="stage === 'entry'"
@@ -43,6 +48,7 @@
           @update:request="naturalRequest = $event"
           @quick-entry="startQuickEntry"
           @submit-request="submitNaturalRequest"
+          @utility-click="showBuildingToast"
         />
 
         <div v-else-if="isProgressStage && progressState" class="assistant-card-shell">
@@ -189,11 +195,14 @@
         </div>
       </div>
     </section>
+    <transition name="toast-fade">
+      <div v-if="toastVisible" class="build-toast">该功能正在建设中哦</div>
+    </transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 
 import ConversationThread from "../../components/agent/ConversationThread.vue";
@@ -274,6 +283,9 @@ const messages = ref<ConversationMessage[]>([]);
 const editingRuleId = ref<string | null>(null);
 const progressState = ref<ProgressState | null>(null);
 const objectResolution = ref<RuleObjectResolution | null>(null);
+const sidebarVisible = ref(false);
+const toastVisible = ref(false);
+let toastTimer = 0;
 
 const previewAlerts = computed(() =>
   createdRule.value ? ruleCenter.alerts.filter((item) => item.ruleId === createdRule.value?.id) : recentAlerts.value,
@@ -284,7 +296,7 @@ const configTitle = computed(() => (currentIntent.value === "alert" ? "预警提
 const configDescription = computed(() =>
   currentIntent.value === "alert"
     ? "我已经先替你识别了规则类型、对象和提醒方式，下面把剩余参数补齐就能进入摘要确认。"
-    : "我已经先替你识别了监控对象、范围和监控条件，下面继续补齐监控参数。",
+    : "我已经先替你识别了监控对象和订单号。系统会默认监控执行完成、执行失败、卡单或长时间未完成以及批量订单结果，并通过 APP 内消息持续提醒至订单结束。",
 );
 const sidebarMessages = computed(() => [...messages.value].reverse());
 const latestMessageId = computed(() => messages.value.at(-1)?.id ?? "");
@@ -319,7 +331,15 @@ function roleLabel(role: ConversationMessage["role"]) {
 }
 
 function shorten(content: string) {
-  return content.length > 26 ? `${content.slice(0, 26)}...` : content;
+  return content.length > 18 ? `${content.slice(0, 18)}...` : content;
+}
+
+function showBuildingToast() {
+  toastVisible.value = true;
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    toastVisible.value = false;
+  }, 1600);
 }
 
 async function copyHistoryMessage(content: string) {
@@ -362,6 +382,7 @@ function normalizeResolvedValues(values: RuleFormValues, resolution: RuleObjectR
   if (!resolution.matched) return values;
   return {
     ...values,
+    notifyChannels: values.notifyChannels?.length ? values.notifyChannels : ["notification-center"],
     objectType: resolution.matched.objectType,
     objectValue: resolution.matched.value,
   };
@@ -382,8 +403,10 @@ function resetFlow() {
   progressState.value = null;
   objectResolution.value = null;
   messages.value = [];
-  pushMessage("assistant", "你好，我是规则配置类助手。");
-  pushMessage("assistant", "我可以帮你完成预警提醒配置和订单执行监控配置。你可以点击快捷场景，也可以直接输入自然语言诉求。");
+  pushMessage(
+    "assistant",
+    "你好，我是规则配置类助手，可以帮你完成预警提醒配置和订单执行监控配置。你可以直接选择下面两个入口开始，也可以在输入框里描述你的规则诉求。",
+  );
 }
 
 function backToEntry() {
@@ -408,16 +431,15 @@ function startQuickEntry(entry: RuleEntryMode) {
   createdRule.value = null;
   formValues.value = {
     naturalRequest: "",
-    ...(entry === "quick-order" ? { monitorFrequency: "summary-daily" as const } : {}),
+    notifyChannels: ["notification-center"],
+    ...(entry === "quick-order"
+      ? {
+          effectivePeriod: "until-complete" as const,
+          monitorCondition: "status-change" as const,
+          monitorThreshold: "执行完成、执行失败、卡单或长时间未完成，批量订单成功失败数量及失败原因",
+        }
+      : {}),
   };
-  pushMessage("user", entry === "quick-alert" ? "我想配置预警提醒" : "我想配置订单执行监控");
-  pushMessage(
-    "assistant",
-    entry === "quick-alert"
-      ? "好的，我先替你打开预警提醒配置卡。你可以继续补充自然语言，也可以直接在卡片里填写。"
-      : "好的，我先替你打开订单执行监控配置卡。你可以继续补充自然语言，也可以直接在卡片里填写。",
-    "success",
-  );
 }
 
 async function continueWithValues(values: RuleFormValues, source: "natural" | "manual") {
@@ -526,26 +548,6 @@ function simulateCreateOutcome(rule: ManagedRule) {
     rule.statusHistory.push({
       status: "create-failed",
       timestamp: "2026-04-24 11:32",
-      note: rule.latestFailureReason,
-    });
-  }
-
-  if (rule.values.monitorCondition === "timeout" && rule.values.monitorFrequency === "instant") {
-    rule.latestFailureReason = "执行安全检查未通过：大范围对象不建议即时提醒，系统已阻断生产绑定。";
-    rule.status = "create-failed";
-    rule.statusHistory.push({
-      status: "create-failed",
-      timestamp: "2026-04-24 11:32",
-      note: rule.latestFailureReason,
-    });
-  }
-
-  if (rule.values.objectType === "group" && rule.values.monitorCondition === "timeout") {
-    rule.latestFailureReason = "任务绑定失败：集团级超时监控需转入异步扫描任务，当前生产通道尚未开放自动绑定。";
-    rule.status = "create-failed";
-    rule.statusHistory.push({
-      status: "create-failed",
-      timestamp: "2026-04-24 11:33",
       note: rule.latestFailureReason,
     });
   }
@@ -688,20 +690,31 @@ onMounted(() => {
     resetFlow();
   }
 });
+
+onBeforeUnmount(() => {
+  window.clearTimeout(toastTimer);
+});
 </script>
 
 <style scoped>
 .chat-layout {
   display: grid;
-  grid-template-columns: 116px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 10px;
   align-items: start;
+  height: 100%;
+  min-height: 0;
   min-width: 0;
+}
+
+.chat-layout.sidebar-hidden {
+  grid-template-columns: 34px minmax(0, 1fr);
 }
 
 .sidebar,
 .chat-panel {
-  min-height: 720px;
+  height: 100%;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -709,8 +722,16 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 10px;
+  max-height: 100%;
+  padding: 9px;
   overflow: hidden;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
 }
 
 .sidebar-head h3 {
@@ -718,17 +739,44 @@ onMounted(() => {
   font-size: 14px;
 }
 
+.sidebar-toggle,
+.sidebar-rail {
+  border: 1px solid rgba(153, 192, 255, 0.16);
+  background: rgba(10, 31, 59, 0.72);
+  color: var(--text-main);
+}
+
+.sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  border-radius: 12px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.sidebar-rail {
+  position: sticky;
+  top: 0;
+  width: 34px;
+  min-height: 132px;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  writing-mode: vertical-rl;
+}
+
 .history-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  overflow: auto;
 }
 
 .history-item {
   display: flex;
-  gap: 8px;
   align-items: flex-start;
-  padding: 10px;
+  padding: 9px;
   border-radius: 14px;
   border: 1px solid rgba(141, 188, 255, 0.1);
   background: rgba(7, 25, 49, 0.72);
@@ -737,28 +785,13 @@ onMounted(() => {
   min-width: 0;
 }
 
-.history-avatar {
-  flex: 0 0 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: rgba(92, 201, 255, 0.14);
-  color: #97e5ff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .history-content {
   min-width: 0;
   flex: 1;
 }
 
 .history-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  display: block;
 }
 
 .history-topline span,
@@ -772,7 +805,7 @@ onMounted(() => {
   margin-top: 5px;
   line-height: 1.4;
   font-size: 12px;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -806,6 +839,8 @@ onMounted(() => {
 }
 
 .chat-panel {
+  display: flex;
+  flex-direction: column;
   padding: 12px;
   overflow: hidden;
 }
@@ -814,7 +849,12 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
+  min-height: 0;
   min-width: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .progress-panel,
@@ -889,6 +929,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
 }
 
 .assistant-card-head {
@@ -938,14 +979,45 @@ onMounted(() => {
   padding: 14px 16px;
 }
 
-@media (max-width: 900px) {
+.build-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 106px;
+  z-index: 60;
+  transform: translateX(-50%);
+  padding: 11px 16px;
+  border-radius: 999px;
+  background: rgba(6, 18, 36, 0.92);
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 14px 30px rgba(0, 8, 20, 0.34);
+}
+
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px);
+}
+
+@media (max-width: 380px) {
   .chat-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: 94px minmax(0, 1fr);
+    gap: 8px;
   }
 
-  .sidebar,
-  .chat-panel {
-    min-height: auto;
+  .chat-layout.sidebar-hidden {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    padding: 8px;
   }
 }
 </style>
