@@ -62,17 +62,17 @@ const router = createRouter({
         {
           path: "agents/troubleshoot",
           component: TroubleshootingView,
-          meta: { title: "业务排障助手" },
+          meta: { title: "勘障助手" },
         },
         {
           path: "agents/rule-config",
           component: RuleConfigView,
-          meta: { title: "规则配置类助手" },
+          meta: { title: "哨兵助手" },
         },
         {
           path: "agents/service",
           component: ServiceHandlingView,
-          meta: { title: "业务办理助手" },
+          meta: { title: "服管助手" },
         },
         {
           path: "agents/:agentId",

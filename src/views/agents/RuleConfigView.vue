@@ -384,7 +384,11 @@ function normalizeResolvedValues(values: RuleFormValues, resolution: RuleObjectR
     ...values,
     notifyChannels: values.notifyChannels?.length ? values.notifyChannels : ["notification-center"],
     objectType: resolution.matched.objectType,
-    objectValue: resolution.matched.value,
+    objectValue: resolution.matched.objectType === "order" ? "" : resolution.matched.value,
+    monitorSpecificOrder:
+      resolution.matched.objectType === "order"
+        ? resolution.matched.value
+        : values.monitorSpecificOrder,
   };
 }
 
@@ -542,7 +546,7 @@ async function beginValidation() {
 }
 
 function simulateCreateOutcome(rule: ManagedRule) {
-  if (rule.values.objectValue === "ACC-44018") {
+  if (rule.values.objectValue === "44018") {
     rule.latestFailureReason = "任务绑定失败：当前对象暂未开放到生产执行任务，建议保存为草稿后稍后重试。";
     rule.status = "create-failed";
     rule.statusHistory.push({

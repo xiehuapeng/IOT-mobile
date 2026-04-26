@@ -3,8 +3,8 @@ import type { AgentId, AgentMeta } from "../types/agent";
 export const agentList: AgentMeta[] = [
   {
     id: "troubleshoot",
-    name: "业务排障助手",
-    shortName: "排障",
+    name: "勘障助手",
+    shortName: "勘障",
     description: "受理通信、订单和实名异常，编排诊断流程并给出处置建议。",
     capability: "问题受理 / 参数识别 / 排障编排",
     category: "运营支撑",
@@ -18,8 +18,8 @@ export const agentList: AgentMeta[] = [
   },
   {
     id: "rule-config",
-    name: "规则配置类助手",
-    shortName: "规则",
+    name: "哨兵助手",
+    shortName: "哨兵",
     description: "通过对话和结构化卡片快速完成提醒规则与监控规则配置。",
     capability: "诉求识别 / 规则配置 / 校验确认",
     category: "策略编排",
@@ -33,8 +33,8 @@ export const agentList: AgentMeta[] = [
   },
   {
     id: "service",
-    name: "业务办理助手",
-    shortName: "办理",
+    name: "服管助手",
+    shortName: "服管",
     description: "识别办理事项，采集参数和材料并推进办理结果确认。",
     capability: "事项识别 / 参数采集 / 办理推进",
     category: "客户服务",
@@ -48,8 +48,8 @@ export const agentList: AgentMeta[] = [
   },
   {
     id: "card-query",
-    name: "卡信息查询助手",
-    shortName: "卡查",
+    name: "卡管助手",
+    shortName: "卡管",
     description: "面向卡状态、套餐、启停和生命周期的快捷查询入口。",
     capability: "状态查询 / 套餐查询 / 生命周期",
     category: "查询服务",
@@ -63,8 +63,8 @@ export const agentList: AgentMeta[] = [
   },
   {
     id: "knowledge-qa",
-    name: "知识问答助手",
-    shortName: "问答",
+    name: "智询助手",
+    shortName: "智询",
     description: "围绕制度口径、操作规范与业务规则提供问答支持。",
     capability: "知识检索 / 规范问答 / 口径说明",
     category: "知识服务",
@@ -78,8 +78,8 @@ export const agentList: AgentMeta[] = [
   },
   {
     id: "data-query",
-    name: "数据查询助手",
-    shortName: "数查",
+    name: "数镜助手",
+    shortName: "数镜",
     description: "面向业务指标、趋势和维度拆解的数据分析入口。",
     capability: "指标查询 / 趋势跟踪 / 数据分析",
     category: "数据服务",

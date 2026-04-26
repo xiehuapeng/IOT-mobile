@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AgentId,
   ManagedRule,
   RuleAlertRecord,
@@ -18,12 +18,12 @@ import type {
 
 const existingObjects: Record<RuleObjectType, string[]> = {
   group: ["华星集团", "华星集团北区", "华星集团政企分部", "云数科技集团", "远海物流集团"],
-  account: ["ACC-31001", "ACC-44018", "ACC-88903"],
+  account: ["31001", "44018", "88903", "202604001122"],
   customer: ["客户-陈洁", "客户-智造工厂A", "客户-南区连锁门店"],
-  order: ["ORD-240301", "ORD-240778", "ORD-241122"],
+  order: ["240301", "240778", "241122", "202604230001"],
 };
 
-const permissionBlocked = new Set(["云数科技集团", "ACC-88903", "客户-南区连锁门店"]);
+const permissionBlocked = new Set(["云数科技集团", "88903", "客户-南区连锁门店"]);
 
 const unsupportedAlertTypesByObject: Partial<Record<RuleObjectType, string[]>> = {
   account: ["red-list-expiry"],
@@ -132,6 +132,18 @@ interface ParsedObjectMatch {
   objectValue?: string;
 }
 
+const NUMERIC_ID_MAX_LENGTH = 20;
+const DEFAULT_ORDER_MONITOR_CONTENT = "执行完成、执行失败、卡单或长时间未完成，批量订单成功失败数量及失败原因";
+
+function isNumericIdentifier(value?: string) {
+  return Boolean(value && new RegExp(`^\\d{1,${NUMERIC_ID_MAX_LENGTH}}$`).test(value.trim()));
+}
+
+function extractNumericIdentifier(text: string) {
+  const match = text.match(new RegExp(`(?<!\\d)\\d{1,${NUMERIC_ID_MAX_LENGTH}}(?!\\d)`));
+  return match?.[0];
+}
+
 export interface NaturalRuleDraftResult {
   intentMatch: RuleIntentMatch;
   values: RuleFormValues;
@@ -155,9 +167,24 @@ export interface RuleObjectResolution {
 function detectObjectMatch(request: string, intent: SupportedRuleIntent): ParsedObjectMatch {
   const text = request.trim();
 
+  if (intent === "alert") {
+    const accountId = extractNumericIdentifier(text);
+    if (text.includes("账户") || (accountId && !text.includes("集团"))) {
+      return accountId ? { objectType: "account", objectValue: accountId } : { objectType: "account" };
+    }
+  }
+
+  if (intent === "order-monitor") {
+    const orderId = extractNumericIdentifier(text);
+    if (text.includes("订单") && orderId) {
+      return { objectType: "order", objectValue: orderId };
+    }
+  }
+
   for (const [objectType, candidates] of Object.entries(existingObjects) as Array<[RuleObjectType, string[]]>) {
     if (intent === "alert" && objectType === "order") continue;
     if (intent === "order-monitor" && objectType === "customer") continue;
+    if ((intent === "alert" && objectType === "account") || (intent === "order-monitor" && objectType === "order")) continue;
 
     const matched = candidates.find((candidate) => text.includes(candidate));
     if (matched) {
@@ -178,7 +205,6 @@ function detectObjectMatch(request: string, intent: SupportedRuleIntent): Parsed
   if (intent === "order-monitor") {
     if (text.includes("订单")) return { objectType: "order" };
     if (text.includes("集团")) return { objectType: "group" };
-    if (text.includes("客户")) return { objectType: "customer" };
   }
 
   return {};
@@ -196,19 +222,62 @@ function detectDemoObjectAlias(text: string, intent: SupportedRuleIntent): Parse
 
 function searchableObjectTypes(_intent: SupportedRuleIntent, objectType?: RuleObjectType) {
   if (objectType) return [objectType];
-  return ["group", "account"] as RuleObjectType[];
+  return _intent === "alert" ? (["group", "account"] as RuleObjectType[]) : (["group", "order"] as RuleObjectType[]);
 }
 
 export function resolveRuleObject(
   intent: SupportedRuleIntent,
   values: RuleFormValues,
 ): RuleObjectResolution {
-  const keyword = values.objectValue?.trim();
+  const keyword =
+    intent === "order-monitor" && values.objectType === "order"
+      ? values.monitorSpecificOrder?.trim() ?? values.objectValue?.trim()
+      : values.objectValue?.trim();
   if (!keyword) {
     return {
       status: "empty",
       candidates: [],
       message: "请先输入监控对象名称、编号或订单号，我再帮你继续匹配。",
+    };
+  }
+
+  if (intent === "alert" && values.objectType === "account") {
+    if (!isNumericIdentifier(keyword)) {
+      return {
+        status: "not-found",
+        candidates: [],
+        message: "账户编码需为不超过 20 位的纯数字，请检查后重新输入。",
+      };
+    }
+    if (permissionBlocked.has(keyword)) {
+      return {
+        status: "forbidden",
+        candidates: [{ objectType: "account", value: keyword }],
+        matched: { objectType: "account", value: keyword },
+        message: `当前账号暂无权限监控账户“${keyword}”。`,
+      };
+    }
+    return {
+      status: "resolved",
+      candidates: [{ objectType: "account", value: keyword }],
+      matched: { objectType: "account", value: keyword },
+      message: `已识别到账户 ${keyword}。`,
+    };
+  }
+
+  if (intent === "order-monitor" && values.objectType === "order") {
+    if (!isNumericIdentifier(keyword)) {
+      return {
+        status: "not-found",
+        candidates: [],
+        message: "订单号需为不超过 20 位的纯数字，请检查后重新输入。",
+      };
+    }
+    return {
+      status: "resolved",
+      candidates: [{ objectType: "order", value: keyword }],
+      matched: { objectType: "order", value: keyword },
+      message: `已识别到订单号 ${keyword}。`,
     };
   }
 
@@ -301,6 +370,12 @@ function inferAlertValues(request: string, baseValues: RuleFormValues): RuleForm
     values.alertOffset = offsetMatch[1];
   }
 
+  const accountId = extractNumericIdentifier(request);
+  if (accountId && (request.includes("账户") || baseValues.objectType === "account" || !request.includes("集团"))) {
+    values.objectType = "account";
+    values.objectValue = accountId;
+  }
+
   if (request.includes("每天") || request.includes("每日")) {
     values.alertFrequency = "daily";
   } else if (request.includes("每周")) {
@@ -318,12 +393,15 @@ function inferOrderValues(request: string, baseValues: RuleFormValues): RuleForm
     notifyChannels: inferNotifyChannels(request),
     effectivePeriod: "until-complete",
     monitorCondition: "status-change",
-    monitorThreshold: "执行完成、执行失败、卡单或长时间未完成，批量订单成功失败数量及失败原因",
+    monitorThreshold: DEFAULT_ORDER_MONITOR_CONTENT,
   };
 
-  const matchedOrder = existingObjects.order.find((candidate) => request.includes(candidate));
-  if (matchedOrder) {
+  const matchedOrder = extractNumericIdentifier(request);
+  if ((request.includes("订单") || baseValues.objectType === "order") && matchedOrder) {
+    values.objectType = "order";
     values.monitorSpecificOrder = matchedOrder;
+  } else if (request.includes("集团")) {
+    values.objectType = "group";
   }
 
   return values;
@@ -334,8 +412,13 @@ function buildSuggestedRuleName(intent: SupportedRuleIntent, values: RuleFormVal
     return `${values.objectValue}${alertTypeLabels[values.alertType]}`;
   }
 
-  if (intent === "order-monitor" && values.objectValue && values.monitorSpecificOrder) {
-    return `${values.objectValue}${values.monitorSpecificOrder}订单执行监控`;
+  if (intent === "order-monitor") {
+    if (values.objectType === "order" && values.monitorSpecificOrder) {
+      return `${values.monitorSpecificOrder}执行异常提醒`;
+    }
+    if (values.objectType === "group" && values.objectValue) {
+      return `${values.objectValue}订单执行监控`;
+    }
   }
 
   return request.slice(0, 18);
@@ -399,19 +482,19 @@ export function detectRuleIntent(request: string): RuleIntentMatch {
   const text = request.trim().toLowerCase();
 
   const alertKeywords = ["红名单", "欠费", "套餐到期", "长周期套餐", "长周期到期", "套餐快到期", "到期", "预警", "提醒"];
-  const orderKeywords = ["订单", "执行情况", "执行失败", "状态变化", "卡单", "超时未完成"];
+  const orderKeywords = ["订单", "执行情况", "执行状态", "执行失败", "状态变化", "卡单", "超时未完成", "监控订单"];
   const unsupportedMap: Array<{ keywords: string[]; agent: AgentId; reason: string }> = [
     { keywords: ["故障", "排障", "失败原因", "卡单"], agent: "troubleshoot", reason: "更适合先进入业务排障助手处理异常。" },
     { keywords: ["怎么做", "口径", "政策", "问答"], agent: "knowledge-qa", reason: "更适合使用知识问答智能体进行口径查询。" },
     { keywords: ["查询", "明细", "状态"], agent: "data-query", reason: "更适合切换到查询类智能体查看结果。" },
   ];
 
-  if (alertKeywords.some((keyword) => text.includes(keyword.toLowerCase()))) {
-    return { intent: "alert", reason: "识别到预警、到期、欠费等提醒型关键词。" };
-  }
-
   if (orderKeywords.some((keyword) => text.includes(keyword.toLowerCase()))) {
     return { intent: "order-monitor", reason: "识别到订单、执行监控、失败通知等监控型关键词。" };
+  }
+
+  if (alertKeywords.some((keyword) => text.includes(keyword.toLowerCase()))) {
+    return { intent: "alert", reason: "识别到预警、到期、欠费等提醒型关键词。" };
   }
 
   const matchedUnsupported = unsupportedMap.find((item) =>
@@ -447,20 +530,34 @@ export function getRuleFields(intent: Exclude<RuleIntent, "unsupported">, values
       label: "监控对象",
       type: "select",
       required: true,
-      options: [
-        { label: "集团", value: "group" },
-        { label: "账户", value: "account" },
-      ],
+      options:
+        intent === "alert"
+          ? [
+              { label: "集团", value: "group" },
+              { label: "账户", value: "account" },
+            ]
+          : [
+              { label: "集团", value: "group" },
+              { label: "订单号", value: "order" },
+            ],
     },
-    {
+  ];
+
+  if (intent === "alert" || values.objectType === "group") {
+    baseFields.push({
       id: "objectValue",
       label: "对象名称/编号",
       type: "text",
       required: true,
-      placeholder: values.objectType === "account" ? "例如：ACC-31001" : "例如：华星集团",
-      helper: values.objectType ? `可用对象示例：${existingObjects[values.objectType].join("、")}` : "先选择监控对象类型。",
-    },
-  ];
+      placeholder: values.objectType === "account" ? "例如：202604001122" : "例如：华星集团",
+      helper:
+        values.objectType === "account"
+          ? "账户编码只要为不超过 20 位的纯数字即可校验通过。"
+          : values.objectType
+            ? `可用对象示例：${existingObjects[values.objectType].join("、")}`
+            : "先选择监控对象类型。",
+    });
+  }
 
   if (intent === "alert") {
     return [
@@ -496,20 +593,27 @@ export function getRuleFields(intent: Exclude<RuleIntent, "unsupported">, values
 
   return [
     ...baseFields,
-    {
-      id: "monitorSpecificOrder",
-      label: "订单号",
-      type: "text",
-      required: true,
-      placeholder: "例如：ORD-240301",
-      helper: `可用订单示例：${existingObjects.order.join("、")}`,
-    },
+    ...(values.objectType === "order"
+      ? [
+          {
+            id: "monitorSpecificOrder",
+            label: "订单号",
+            type: "text" as const,
+            required: true,
+            placeholder: "例如：202604230001",
+            helper: "订单号只要为不超过 20 位的纯数字即可校验通过。",
+          },
+        ]
+      : []),
     {
       id: "monitorThreshold",
       label: "监控内容",
       type: "textarea",
-      placeholder: "执行完成、执行失败、卡单或长时间未完成，批量订单成功失败数量及失败原因",
-      helper: "系统默认通过 APP 内消息提醒，并持续监控至订单结束。",
+      placeholder: DEFAULT_ORDER_MONITOR_CONTENT,
+      helper:
+        values.objectType === "group"
+          ? "选择集团后，将默认监控该集团下所有正在执行中的订单。"
+          : "系统默认通过 APP 内消息提醒，并持续监控至订单结束。",
     },
   ];
 }
@@ -575,7 +679,23 @@ export function validateRuleForm(
   const duplicateGroup = groups[2];
   const capacityGroup = groups[3];
 
-  if (!values.objectType || !values.objectValue?.trim()) {
+  if (!values.objectType) {
+    objectGroup.issues.push({ type: "object", severity: "error", title: "监控对象不完整", detail: "请选择监控对象类型。" });
+  } else if (intent === "alert" && values.objectType === "account") {
+    if (!values.objectValue?.trim()) {
+      objectGroup.issues.push({ type: "object", severity: "error", title: "账户编码缺失", detail: "请填写账户编码。" });
+    } else if (!isNumericIdentifier(values.objectValue)) {
+      objectGroup.issues.push({ type: "object", severity: "error", title: "账户编码格式错误", detail: "账户编码需为不超过 20 位的纯数字。" });
+    } else if (permissionBlocked.has(values.objectValue.trim())) {
+      objectGroup.issues.push({ type: "object", severity: "error", title: "无监控权限", detail: `当前账号暂时没有权限监控“${values.objectValue}”。` });
+    }
+  } else if (intent === "order-monitor" && values.objectType === "order") {
+    if (!values.monitorSpecificOrder?.trim()) {
+      objectGroup.issues.push({ type: "object", severity: "error", title: "订单号缺失", detail: "请填写订单号。" });
+    } else if (!isNumericIdentifier(values.monitorSpecificOrder)) {
+      objectGroup.issues.push({ type: "object", severity: "error", title: "订单号格式错误", detail: "订单号需为不超过 20 位的纯数字。" });
+    }
+  } else if (!values.objectValue?.trim()) {
     objectGroup.issues.push({ type: "object", severity: "error", title: "监控对象不完整", detail: "请选择监控对象类型并填写对象名称或编号。" });
   } else {
     const candidates = existingObjects[values.objectType];
@@ -615,12 +735,14 @@ export function validateRuleForm(
     values.effectivePeriod = "until-complete";
     values.monitorCondition = "status-change";
     if (!values.monitorThreshold?.trim()) {
-      values.monitorThreshold = "执行完成、执行失败、卡单或长时间未完成，批量订单成功失败数量及失败原因";
+      values.monitorThreshold = DEFAULT_ORDER_MONITOR_CONTENT;
     }
-    if (!values.monitorSpecificOrder?.trim()) {
+    if (values.objectType === "group") {
+      delete values.monitorSpecificOrder;
+    } else if (!values.monitorSpecificOrder?.trim()) {
       ruleGroup.issues.push({ type: "rule", severity: "error", title: "订单号缺失", detail: "请补充需要持续监控的订单号。" });
-    } else if (!existingObjects.order.includes(values.monitorSpecificOrder.trim())) {
-      objectGroup.issues.push({ type: "object", severity: "error", title: "订单号不存在", detail: `订单号“${values.monitorSpecificOrder}”不存在，请检查后重新输入。` });
+    } else if (!isNumericIdentifier(values.monitorSpecificOrder)) {
+      objectGroup.issues.push({ type: "object", severity: "error", title: "订单号格式错误", detail: "订单号需为不超过 20 位的纯数字。" });
     }
   }
 
@@ -675,11 +797,16 @@ export function buildRuleSummary(intent: Exclude<RuleIntent, "unsupported">, val
         ]
       : [
           { label: "规则类型", value: "订单执行监控类" },
-          { label: "监控对象", value: `${objectTypeLabels[values.objectType as RuleObjectType]} / ${values.objectValue ?? "-"}` },
-          { label: "订单号", value: values.monitorSpecificOrder ?? "-" },
+          {
+            label: "监控对象",
+            value:
+              values.objectType === "order"
+                ? `${objectTypeLabels[values.objectType as RuleObjectType]} / ${values.monitorSpecificOrder ?? values.objectValue ?? "-"}`
+                : `${objectTypeLabels[values.objectType as RuleObjectType]} / ${values.objectValue ?? "-"}`,
+          },
           {
             label: "监控内容",
-            value: values.monitorThreshold ?? "执行完成、执行失败、卡单或长时间未完成，批量订单成功失败数量及失败原因",
+            value: values.monitorThreshold ?? DEFAULT_ORDER_MONITOR_CONTENT,
           },
           { label: "通知方式", value: "APP内消息" },
           { label: "监控周期", value: "持续监控至订单结束" },
@@ -725,8 +852,8 @@ export function createManagedRule(
     name: values.ruleName ?? "未命名规则",
     intent,
     objectType: values.objectType as RuleObjectType,
-    objectValue: values.objectValue ?? "",
-    scopeLabel: intent === "order-monitor" ? (values.monitorSpecificOrder ?? "-") : formatMonitorScope(values),
+    objectValue: values.objectType === "order" ? (values.monitorSpecificOrder ?? values.objectValue ?? "") : (values.objectValue ?? ""),
+    scopeLabel: formatMonitorScope(values),
     primaryCondition: getPrimaryCondition(intent, values),
     frequencyLabel: intent === "alert" ? frequencyLabels[values.alertFrequency ?? ""] : "持续监控至订单结束",
     notifyChannels: (values.notifyChannels ?? []) as RuleNotificationChannel[],
@@ -818,12 +945,12 @@ export const starterRules: ManagedRule[] = [
   ),
   createStarterRule(
     "RULE-AL1002",
-    "ACC-44018欠费风险提醒",
+    "44018欠费风险提醒",
     "alert",
     {
-      ruleName: "ACC-44018欠费风险提醒",
+      ruleName: "44018欠费风险提醒",
       objectType: "account",
-      objectValue: "ACC-44018",
+      objectValue: "44018",
       alertType: "arrears-risk",
       alertTimingMode: "condition-hit",
       alertFrequency: "once",
@@ -841,7 +968,6 @@ export const starterRules: ManagedRule[] = [
       ruleName: "华星集团订单执行监控",
       objectType: "group",
       objectValue: "华星集团",
-      monitorSpecificOrder: "ORD-240301",
       monitorCondition: "status-change",
       monitorTimingMode: "status-change",
       monitorThreshold: "执行完成、执行失败、卡单或长时间未完成，批量订单成功失败数量及失败原因",
@@ -853,12 +979,12 @@ export const starterRules: ManagedRule[] = [
   ),
   createStarterRule(
     "RULE-OM2002",
-    "ACC-31001套餐到期提醒（历史）",
+    "31001套餐到期提醒（历史）",
     "alert",
     {
-      ruleName: "ACC-31001套餐到期提醒（历史）",
+      ruleName: "31001套餐到期提醒（历史）",
       objectType: "account",
-      objectValue: "ACC-31001",
+      objectValue: "31001",
       alertType: "plan-expiry",
       alertTimingMode: "days-before",
       alertOffset: "7",
@@ -873,12 +999,12 @@ export const starterRules: ManagedRule[] = [
   ),
   createStarterRule(
     "RULE-AL1003",
-    "ACC-31001长周期套餐到期提醒",
+    "31001长周期套餐到期提醒",
     "alert",
     {
-      ruleName: "ACC-31001长周期套餐到期提醒",
+      ruleName: "31001长周期套餐到期提醒",
       objectType: "account",
-      objectValue: "ACC-31001",
+      objectValue: "31001",
       alertType: "plan-expiry",
       alertTimingMode: "days-before",
       alertOffset: "7",
@@ -893,13 +1019,13 @@ export const starterRules: ManagedRule[] = [
   ),
   createStarterRule(
     "RULE-OM2003",
-    "ACC-44018订单执行监控",
+    "240778订单执行监控",
     "order-monitor",
     {
-      ruleName: "ACC-44018订单执行监控",
-      objectType: "account",
-      objectValue: "ACC-44018",
-      monitorSpecificOrder: "ORD-240778",
+      ruleName: "240778订单执行监控",
+      objectType: "order",
+      objectValue: "240778",
+      monitorSpecificOrder: "240778",
       monitorCondition: "status-change",
       monitorTimingMode: "status-change",
       monitorThreshold: "执行完成、执行失败、卡单或长时间未完成，批量订单成功失败数量及失败原因",
@@ -917,7 +1043,6 @@ export const starterRules: ManagedRule[] = [
       ruleName: "华星集团订单执行监控（已完成）",
       objectType: "group",
       objectValue: "华星集团",
-      monitorSpecificOrder: "ORD-241122",
       monitorCondition: "status-change",
       monitorTimingMode: "status-change",
       monitorThreshold: "执行完成、执行失败、卡单或长时间未完成，批量订单成功失败数量及失败原因",
@@ -929,12 +1054,12 @@ export const starterRules: ManagedRule[] = [
   ),
   createStarterRule(
     "RULE-AL1004",
-    "ACC-31001欠费风险提醒（已终止）",
+    "31001欠费风险提醒（已终止）",
     "alert",
     {
-      ruleName: "ACC-31001欠费风险提醒（已终止）",
+      ruleName: "31001欠费风险提醒（已终止）",
       objectType: "account",
-      objectValue: "ACC-31001",
+      objectValue: "31001",
       alertType: "arrears-risk",
       alertTimingMode: "condition-hit",
       alertFrequency: "once",
@@ -967,11 +1092,11 @@ export const starterAlerts: RuleAlertRecord[] = [
   {
     id: "ALERT-2",
     ruleId: "RULE-OM2001",
-    ruleName: "ORD-240301执行失败提醒",
+    ruleName: "240301执行失败提醒",
     ruleTypeLabel: "订单执行监控类",
-    objectValue: "ORD-240301",
+    objectValue: "240301",
     currentStatus: "执行失败",
-    reason: "订单 ORD-240301 执行失败，已达到即时提醒条件。",
+    reason: "订单 240301 执行失败，已达到即时提醒条件。",
     triggeredAt: "2026-04-22 14:12",
     recommendation: "建议跳转业务排障助手继续处理失败原因。",
     notificationChannels: ["notification-center"],
@@ -998,8 +1123,8 @@ function createStarterRule(
     name,
     intent,
     objectType: values.objectType as RuleObjectType,
-    objectValue: values.objectValue ?? "",
-    scopeLabel: intent === "order-monitor" ? (values.monitorSpecificOrder ?? "-") : formatMonitorScope(values),
+    objectValue: values.objectType === "order" ? (values.monitorSpecificOrder ?? values.objectValue ?? "") : (values.objectValue ?? ""),
+    scopeLabel: formatMonitorScope(values),
     primaryCondition: getPrimaryCondition(intent, values),
     frequencyLabel: intent === "alert" ? frequencyLabels[values.alertFrequency ?? ""] : "持续监控至订单结束",
     notifyChannels: (values.notifyChannels ?? []) as RuleNotificationChannel[],
@@ -1039,15 +1164,10 @@ function formatAlertTiming(values: RuleFormValues): string {
 }
 
 function formatMonitorScope(values: RuleFormValues): string {
-  if (values.objectType !== "group" && values.objectType !== "customer") {
-    return values.objectType === "order" ? "单订单监控" : "-";
+  if (values.objectType === "order") {
+    return values.monitorSpecificOrder ? `订单号 / ${values.monitorSpecificOrder}` : "单订单监控";
   }
-
-  if (values.monitorScope === "specific-order") {
-    return `${monitorScopeLabels["specific-order"]}${values.monitorSpecificOrder ? ` / ${values.monitorSpecificOrder}` : ""}`;
-  }
-
-  return monitorScopeLabels[values.monitorScope ?? "all-orders"] ?? "所有订单";
+  return "集团下全部执行中订单";
 }
 
 function formatEffective(values: RuleFormValues): string {
@@ -1083,5 +1203,5 @@ function buildAlertHitReason(rule: ManagedRule): string {
 }
 
 function buildOrderHitReason(rule: ManagedRule): string {
-  return `订单 ${rule.values.monitorSpecificOrder ?? "-"} 出现执行异常：2 笔成功、1 笔失败，失败原因已同步到消息中心。`;
+  return `订单 ${rule.values.monitorSpecificOrder ?? rule.objectValue ?? "-"} 出现执行异常：2 笔成功、1 笔失败，失败原因已同步到消息中心。`;
 }

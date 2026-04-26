@@ -104,7 +104,6 @@ const emit = defineEmits<{
 }>();
 
 const localValues = reactive<RuleFormValues>({});
-let monitorFrequencyTouched = false;
 
 function cloneValues(source: RuleFormValues): RuleFormValues {
   const next: RuleFormValues = {};
@@ -119,7 +118,6 @@ watch(
   (next) => {
     Object.keys(localValues).forEach((key) => delete localValues[key as keyof RuleFormValues]);
     Object.assign(localValues, cloneValues(next));
-    monitorFrequencyTouched = Boolean(next.monitorFrequency);
   },
   { immediate: true, deep: true },
 );
@@ -136,10 +134,6 @@ function arrayValue(key: string) {
 function setValue(key: string, value: string) {
   localValues[key as keyof RuleFormValues] = value as never;
 
-  if (key === "monitorFrequency") {
-    monitorFrequencyTouched = true;
-  }
-
   if (key === "alertType") {
     if (value === "arrears-risk") {
       localValues.alertTimingMode = "condition-hit";
@@ -148,21 +142,12 @@ function setValue(key: string, value: string) {
     }
   }
 
-  if (key === "objectType" && props.fields.some((field) => field.id === "monitorFrequency")) {
-    if (value === "order") {
-      delete localValues.monitorScope;
+  if (key === "objectType") {
+    if (value === "group") {
       delete localValues.monitorSpecificOrder;
-    } else if (value === "group" || value === "customer") {
-      localValues.monitorScope = (localValues.monitorScope ?? "all-orders") as never;
+    } else if (value === "order") {
+      delete localValues.objectValue;
     }
-
-    if (!monitorFrequencyTouched) {
-      localValues.monitorFrequency = (value === "order" ? "instant" : "summary-daily") as never;
-    }
-  }
-
-  if (key === "monitorScope" && value !== "specific-order") {
-    delete localValues.monitorSpecificOrder;
   }
 
   if (key === "monitorTimingMode") {
